@@ -1,0 +1,21 @@
+{
+    "python.defaultInterpreterPath": "backend/.venv/Scripts/python.exe",
+    "python.analysis.exclude": [
+        "**/.venv"
+    ],
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    },
+    "ruff.lint.select": [
+        "C",
+        "E",
+        "F",
+        "W",
+        "I",
+        "UP"
+    ],
+    "ruff.format": true,
+    "ruff.lineLength": 120
+}

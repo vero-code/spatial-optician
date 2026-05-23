@@ -1,0 +1,12 @@
+# Python / FastAPI (Backend)
+backend/.venv/
+backend/__pycache__/
+backend/*.pyc
+backend/.env
+
+# Node / React (Frontend)
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+frontend/.env
+.env
