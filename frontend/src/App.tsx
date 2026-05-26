@@ -305,6 +305,31 @@ export default function App() {
 
       </main>
 
+      {/* Floating System Notice (Work in Progress) */}
+      <div className="fixed bottom-6 left-6 right-6 md:left-auto md:right-6 md:max-w-md z-50">
+        <div className="bg-[#0a2e5c]/85 border-2 border-white/80 p-5 relative backdrop-blur-xl shadow-2xl blueprint-border">
+          {/* Corner marks */}
+          <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-white"></div>
+          <div className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-white"></div>
+          <div className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-white"></div>
+          <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-white"></div>
+          
+          <div className="flex gap-4 items-start">
+            <div className="shrink-0 w-8 h-8 rounded-full border border-white/40 flex items-center justify-center bg-white/10 text-white animate-pulse">
+              <Info size={16} />
+            </div>
+            <div className="text-left">
+              <h4 className="text-xs uppercase tracking-[0.2em] font-bold mb-1 flex items-center gap-2">
+                System Status <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-ping"></span>
+              </h4>
+              <p className="text-[11px] leading-relaxed uppercase opacity-85">
+                Notice: Spatial Optician systems are currently undergoing architectural updates and calibration. Localized depth buffer disturbances may occur.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Footer Branding */}
       <footer className="mt-16 pt-8 border-t border-white/20 flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] uppercase tracking-[0.4em] opacity-40">
         <div className="flex gap-8">
