@@ -1,0 +1,6 @@
+{
+  "name": "Spatial Optician",
+  "description": "An architectural draft-style interface for spatial light analysis and optimization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

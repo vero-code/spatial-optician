@@ -10,3 +10,7 @@ frontend/dist/
 frontend/.next/
 frontend/.env
 .env
+frontend/build/
+frontend/coverage/
+.DS_Store
+*.log
