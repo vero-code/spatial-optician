@@ -1,16 +1,20 @@
-# Python / FastAPI (Backend)
-backend/.venv/
-backend/__pycache__/
-backend/*.pyc
-backend/.env
-
-# Node / React (Frontend)
-frontend/node_modules/
-frontend/dist/
-frontend/.next/
-frontend/.env
-.env
-frontend/build/
-frontend/coverage/
+# Global ignores (applied recursively to all folders)
+node_modules/
+__pycache__/
+*.pyc
 .DS_Store
 *.log
+.env
+.env.*
+
+# Python / FastAPI (Backend)
+backend/.venv/
+
+# Node / React (Frontend)
+frontend/dist/
+frontend/.next/
+frontend/build/
+frontend/coverage/
+
+# MCP MongoDB Server
+mcp-mongo/build/
