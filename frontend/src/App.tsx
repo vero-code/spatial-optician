@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Compass, 
   Ruler, 
@@ -8,7 +8,10 @@ import {
   Layers, 
   DraftingCompass,
   ArrowRight,
-  Info
+  Info,
+  Send,
+  Bot,
+  User
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -55,6 +58,41 @@ const DimensionLine = ({ label, className = "" }: { label: string, className?: s
 
 export default function App() {
   const [dragActive, setDragActive] = useState(false);
+  const [chatMessages, setChatMessages] = useState<{role: 'user' | 'agent', text: string}[]>([
+    { role: 'agent', text: 'SYSTEM INITIALIZED. AGENT CONNECTED TO MCP DATABASE. AWAITING QUERY...' }
+  ]);
+  const [inputText, setInputText] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const [sessionId] = useState(() => Math.random().toString(36).substring(7));
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, isTyping]);
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputText.trim()) return;
+
+    const userMsg = inputText.trim();
+    setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setInputText("");
+    setIsTyping(true);
+
+    try {
+      const res = await fetch("https://spatial-optician-backend-601334765015.europe-west1.run.app/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, message: userMsg })
+      });
+      const data = await res.json();
+      setChatMessages(prev => [...prev, { role: 'agent', text: data.message }]);
+    } catch (err) {
+      setChatMessages(prev => [...prev, { role: 'agent', text: 'ERROR CONNECTING TO AGENT PLATFORM.' }]);
+    } finally {
+      setIsTyping(false);
+    }
+  };
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -300,28 +338,63 @@ export default function App() {
 
       </main>
 
-      {/* Floating System Notice (Work in Progress) */}
-      <div className="fixed bottom-6 left-6 right-6 md:left-auto md:right-6 md:max-w-md z-50">
-        <div className="bg-[#0a2e5c]/85 border-2 border-white/80 p-5 relative backdrop-blur-xl shadow-2xl blueprint-border">
+      {/* Agent Chat Widget */}
+      <div className="fixed bottom-6 left-6 right-6 md:left-auto md:right-6 md:w-[400px] z-50">
+        <div className="bg-[#0a2e5c]/95 border-2 border-white/80 p-5 relative backdrop-blur-xl shadow-2xl blueprint-border flex flex-col h-[500px]">
           {/* Corner marks */}
           <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-white"></div>
           <div className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-white"></div>
           <div className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-white"></div>
           <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-white"></div>
           
-          <div className="flex gap-4 items-start">
-            <div className="shrink-0 w-8 h-8 rounded-full border border-white/40 flex items-center justify-center bg-white/10 text-white animate-pulse">
-              <Info size={16} />
-            </div>
-            <div className="text-left">
-              <h4 className="text-xs uppercase tracking-[0.2em] font-bold mb-1 flex items-center gap-2">
-                System Status <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-ping"></span>
-              </h4>
-              <p className="text-[11px] leading-relaxed uppercase opacity-85">
-                Notice: Spatial Optician systems are currently undergoing architectural updates and calibration. Localized depth buffer disturbances may occur.
-              </p>
-            </div>
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-white/20 pb-3 mb-4 shrink-0">
+             <div className="flex items-center gap-2">
+               <Bot size={18} className="text-white" />
+               <h4 className="text-xs uppercase tracking-[0.2em] font-bold">
+                 Agent Interface <span className="inline-block ml-2 w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+               </h4>
+             </div>
+             <span className="text-[10px] opacity-50 uppercase">Session: {sessionId.toUpperCase()}</span>
           </div>
+
+          {/* Messages Area */}
+          <div className="flex-1 overflow-y-auto mb-4 pr-2 space-y-4 font-mono text-[11px] leading-relaxed custom-scrollbar">
+            {chatMessages.map((msg, idx) => (
+              <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                {msg.role === 'agent' && <div className="shrink-0 mt-1 opacity-70"><Bot size={14} /></div>}
+                <div className={`p-3 max-w-[85%] border break-words ${msg.role === 'user' ? 'bg-white/10 border-white/30 text-right' : 'bg-transparent border-white/10 text-left'}`}>
+                  {msg.text.split('\\n').map((line, i) => (
+                    <span key={i}>{line}<br/></span>
+                  ))}
+                </div>
+                {msg.role === 'user' && <div className="shrink-0 mt-1 opacity-70"><User size={14} /></div>}
+              </div>
+            ))}
+            {isTyping && (
+               <div className="flex gap-3 justify-start">
+                 <div className="shrink-0 mt-1 opacity-70"><Bot size={14} /></div>
+                 <div className="p-3 border border-white/10 text-left opacity-50 uppercase flex items-center gap-2">
+                   Processing <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"></span><span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></span><span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></span>
+                 </div>
+               </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input Area */}
+          <form onSubmit={handleSendMessage} className="relative shrink-0 mt-auto">
+            <input 
+              type="text" 
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="ENTER COMMAND OR QUERY..."
+              className="w-full bg-black/40 border border-white/40 text-white p-3 pr-10 text-[11px] uppercase tracking-wider font-mono outline-none focus:border-white transition-colors placeholder:opacity-40"
+            />
+            <button type="submit" disabled={isTyping} className="absolute right-2 top-1/2 -translate-y-1/2 opacity-70 hover:opacity-100 disabled:opacity-30 p-1">
+              <Send size={16} />
+            </button>
+          </form>
         </div>
       </div>
 

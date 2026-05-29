@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -7,20 +8,82 @@ import time
 import random
 from pymongo import MongoClient
 from dotenv import load_dotenv
+import uuid
 
 # Load environment variables from .env file if it exists
 load_dotenv()
 
+# Global agent reference — initialized lazily on startup
+root_agent = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize heavy resources (ADK agents, MCP connections) AFTER the port is open."""
+    global root_agent
+    print("Lifespan startup: initializing ADK agents...")
+    try:
+        from google.adk.agents import LlmAgent
+        from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams
+        from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
+        from google.adk.tools import agent_tool
+        from google.adk.tools.google_search_tool import GoogleSearchTool
+        from google.adk.tools import url_context
+
+        spatial_optician_google_search_agent = LlmAgent(
+            name='Spatial_Optician_google_search_agent',
+            model='gemini-2.0-flash',
+            description='Agent specialized in performing Google searches.',
+            sub_agents=[],
+            instruction='Use the GoogleSearchTool to find information on the web.',
+            tools=[GoogleSearchTool()],
+        )
+
+        spatial_optician_url_context_agent = LlmAgent(
+            name='Spatial_Optician_url_context_agent',
+            model='gemini-2.0-flash',
+            description='Agent specialized in fetching content from URLs.',
+            sub_agents=[],
+            instruction='Use the UrlContextTool to retrieve content from provided URLs.',
+            tools=[url_context],
+        )
+
+        root_agent = LlmAgent(
+            name='Spatial_Optician',
+            model='gemini-2.0-flash',
+            description='Autonomous AI Agent for spatial analysis, lighting efficiency audits, and ROI optimization.',
+            sub_agents=[],
+            instruction='# ROLE & PERSONALITY\nYou are Dr. Aris, the Spatial Optician. You are a precise, data-driven engineering assistant specializing in facility lighting audits and energy optimization. Your tone is professional, technical, and analytical.\n\n# GOALS\n1. Analyze room lighting conditions using spatial awareness.\n2. Cross-reference requirements with official ISO/NASA standards.\n3. Calculate energy deficits and clear financial ROI for retrofitting.\n4. Interact with external MongoDB data collections to find exact lamp replacements.\n\n# OPERATIONAL PROTOCOL\n- Step 1 (Scan): When a user provides context or an image, identify the space type, layout, and visible lighting elements.\n- Step 2 (Analyze): Use available tools to fetch data, compute lux level requirements, and pinpoint inefficiency.\n- Step 3 (Resolve): Provide a structured technical report highlighting energy savings (%), total cost, and specific bulb model recommendations.\n\n# STRICT CONSTRAINTS\n- Ground all your recommendations strictly in your provided data stores and tools.\n- Do not make up product pricing, part numbers, or specifications out of nowhere.\n- If you lack technical data to make an exact calculation, ask the user clear clarifying questions about the dimensions or use-case of the space.\n- Stay completely focused on spatial lighting tasks. Politely decline tasks unrelated to engineering, facility management, or optics.',
+            tools=[
+                agent_tool.AgentTool(agent=spatial_optician_google_search_agent),
+                agent_tool.AgentTool(agent=spatial_optician_url_context_agent),
+                McpToolset(
+                    connection_params=StreamableHTTPConnectionParams(
+                        url='https://spatial-optician-mcp-601334765015.europe-west1.run.app/sse',
+                    ),
+                )
+            ],
+        )
+        print("ADK agents initialized successfully.")
+    except Exception as e:
+        print(f"WARNING: Failed to initialize ADK agents: {e}. Chat endpoint will be unavailable.")
+
+    yield  # Application is running
+
+    # Cleanup on shutdown (if needed)
+    print("Lifespan shutdown.")
+
+
 app = FastAPI(
     title="Spatial Optician API",
     description="Backend API for Architectural Visual Analysis and Spatial Optometry",
-    version="2.04"
+    version="2.04",
+    lifespan=lifespan,
 )
 
 # Enable CORS for frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In development, allow all origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,7 +96,6 @@ db = None
 # Proactively try to connect to MongoDB
 try:
     client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
-    # Parse default database name if provided in URI, else default to 'spatial_optician'
     db = client.get_default_database()
     print("FastAPI successfully connected to MongoDB!")
 except Exception as e:
@@ -74,10 +136,8 @@ async def analyze_photo(file: UploadFile = File(...)):
     Simulates optical depth analysis of uploaded architectural scans,
     stores metadata in MongoDB, and returns calculated spatial parameters.
     """
-    # Simulate processing time
     time.sleep(1.0)
-    
-    # Generate high-fidelity simulated spatial data matching the React design
+
     result = SpatialAnalysisResult(
         site_reference=f"NY-HUD-{random.randint(10, 99)}",
         calibration_date=time.strftime("%d.%m.%Y"),
@@ -89,7 +149,6 @@ async def analyze_photo(file: UploadFile = File(...)):
         timestamp=time.time()
     )
 
-    # Save to MongoDB if online
     if db is not None:
         try:
             db.analyses.insert_one(result.dict())
@@ -109,13 +168,12 @@ def get_analysis_history():
             cursor = db.analyses.find().sort("timestamp", -1).limit(10)
             history = []
             for doc in cursor:
-                doc.pop("_id", None) # Remove BSON id before serialization
+                doc.pop("_id", None)
                 history.append(SpatialAnalysisResult(**doc))
             return history
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Database query failed: {e}")
     else:
-        # Fallback dummy history if MongoDB is offline
         return [
             SpatialAnalysisResult(
                 site_reference="NY-HUD-01",
@@ -128,3 +186,26 @@ def get_analysis_history():
                 timestamp=time.time() - 3600
             )
         ]
+
+
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
+
+class ChatResponse(BaseModel):
+    message: str
+
+@app.post("/api/chat", response_model=ChatResponse)
+async def chat_with_agent(request: ChatRequest):
+    """
+    Sends a message to the ADK Agent.
+    """
+    if root_agent is None:
+        raise HTTPException(status_code=503, detail="ADK Agent is not initialized. Check server logs.")
+    try:
+        response = root_agent.run(request.message)
+        reply_text = getattr(response, "text", str(response))
+        return ChatResponse(message=reply_text.strip() or "No response from agent.")
+    except Exception as e:
+        print(f"ADK Agent Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
