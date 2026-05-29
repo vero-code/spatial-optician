@@ -1,5 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { 
   CallToolRequestSchema, 
   ListToolsRequestSchema,
@@ -7,6 +8,7 @@ import {
   McpError
 } from "@modelcontextprotocol/sdk/types.js";
 import { MongoClient, Db, Document } from "mongodb";
+import express from "express";
 
 // Fetch MongoDB URI from environment or default to local development instance
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/spatial_optician";
@@ -275,11 +277,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// Start the MCP server using standard input/output transport
+// Start the MCP server (supports Stdio or SSE transport dynamically)
 async function startServer() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("MongoDB Model Context Protocol (MCP) Server is listening on stdin/stdout...");
+  const PORT = process.env.PORT;
+
+  if (PORT) {
+    // If PORT is defined (e.g. on Google Cloud Run), start as an SSE Express Server
+    const app = express();
+    app.use(express.json());
+
+    let sseTransport: SSEServerTransport | null = null;
+
+    app.get("/sse", async (req, res) => {
+      console.error("New SSE connection requested.");
+      sseTransport = new SSEServerTransport("/messages", res);
+      await server.connect(sseTransport);
+    });
+
+    app.post("/messages", async (req, res) => {
+      if (sseTransport) {
+        await sseTransport.handlePostMessage(req, res);
+      } else {
+        res.status(400).send("SSE connection not established yet. Call GET /sse first.");
+      }
+    });
+
+    app.listen(PORT, () => {
+      console.error(`MongoDB MCP Server running as SSE Service on port ${PORT}`);
+    });
+  } else {
+    // Default to local Stdio transport (for Claude Desktop / local CLI testing)
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error("MongoDB Model Context Protocol (MCP) Server is listening on stdin/stdout...");
+  }
 }
 
 startServer().catch(err => {
