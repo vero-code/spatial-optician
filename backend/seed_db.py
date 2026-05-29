@@ -73,7 +73,45 @@ def seed_database():
                 "mounting_type": "Surface/Chain",
                 "unit_cost_usd": 125.00,
                 "lifespan_hours": 60000,
-                "suitable_for": ["warehouse_aisles", "loading_docks", "workshop"]
+            },
+            {
+                "model_id": "LED-T8-4FT-15W",
+                "brand": "OptiLux Solutions",
+                "type": "Tube",
+                "technology": "LED",
+                "luminous_flux_lumens": 2200,
+                "power_watts": 15,
+                "efficacy_lm_w": round(2200 / 15),
+                "color_temperature_k": 4000,
+                "unit_cost_usd": 12.50,
+                "lifespan_hours": 50000,
+                "compatible_replacements": ["FL-T8-32W"]
+            },
+            {
+                "model_id": "LED-HB-150W",
+                "brand": "AeroLight Systems",
+                "type": "High Bay",
+                "technology": "LED",
+                "luminous_flux_lumens": 21000,
+                "power_watts": 150,
+                "efficacy_lm_w": round(21000 / 150),
+                "color_temperature_k": 5000,
+                "unit_cost_usd": 115.00,
+                "lifespan_hours": 60000,
+                "compatible_replacements": ["MH-HB-400W", "HPS-HB-400W"]
+            },
+            {
+                "model_id": "LED-A19-9W",
+                "brand": "OptiLux Solutions",
+                "type": "A-Shape Bulb",
+                "technology": "LED",
+                "luminous_flux_lumens": 800,
+                "power_watts": 9,
+                "efficacy_lm_w": round(800 / 9),
+                "color_temperature_k": 3000,
+                "unit_cost_usd": 4.50,
+                "lifespan_hours": 25000,
+                "compatible_replacements": ["INC-A19-60W", "CFL-A19-14W"]
             }
         ]
         db["equipment_catalog"].insert_many(fixtures)
@@ -92,6 +130,9 @@ def seed_database():
                 "lux_deficit": -120,
                 "current_lighting_type": "Legacy HID (Mercury/HPS)",
                 "current_estimated_power_kw": 45.0,
+                "reflectance_ceiling": 0.30,
+                "reflectance_walls": 0.30,
+                "reflectance_floor": 0.15,
                 "recommended_fixture_id": "OPT-IND-LED-200",
                 "recommended_quantity": 48,
                 "status": "Needs Upgrade",
@@ -108,6 +149,9 @@ def seed_database():
                 "lux_deficit": 10,
                 "current_lighting_type": "EcoLux Systems Panel V1",
                 "current_estimated_power_kw": 14.4,
+                "reflectance_ceiling": 0.80,
+                "reflectance_walls": 0.50,
+                "reflectance_floor": 0.20,
                 "recommended_fixture_id": None,
                 "recommended_quantity": 0,
                 "status": "Optimized",
