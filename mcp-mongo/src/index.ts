@@ -1,14 +1,18 @@
+import { randomUUID } from "node:crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { 
-  CallToolRequestSchema, 
+import {
+  CallToolRequestSchema,
   ListToolsRequestSchema,
   ErrorCode,
-  McpError
+  McpError,
+  isInitializeRequest
 } from "@modelcontextprotocol/sdk/types.js";
 import { MongoClient, Db, Document } from "mongodb";
-import express from "express";
+import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
+import { Request, Response } from "express";
 
 // Fetch MongoDB URI from environment or default to local development instance
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/spatial_optician";
@@ -22,7 +26,6 @@ async function getDb(): Promise<Db> {
   try {
     client = new MongoClient(MONGODB_URI);
     await client.connect();
-    // Parse database name from the connection string or default to spatial_optician
     const dbName = new URL(MONGODB_URI).pathname.replace("/", "") || "spatial_optician";
     db = client.db(dbName);
     console.error(`Successfully connected to database: ${dbName}`);
@@ -33,21 +36,15 @@ async function getDb(): Promise<Db> {
   }
 }
 
-// Initialize the MCP Server
-const server = new Server({
-  name: "spatial-optician-mcp-mongo",
-  version: "1.0.0"
-}, {
-  capabilities: {
-    tools: {}
-  }
-});
+// Factory: builds a fresh MCP Server with all tools registered
+function buildMcpServer(): Server {
+  const server = new Server(
+    { name: "spatial-optician-mcp-mongo", version: "1.0.0" },
+    { capabilities: { tools: {} } }
+  );
 
-/**
- * Register all available database tools
- */
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
+  // ─── Tool list ──────────────────────────────────────────────────────────────
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       {
         name: "list_collections",
@@ -56,27 +53,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_schema",
-        description: "Analyzes the database collection schema by sampling documents and listing their types.",
+        description: "Analyzes the database collection schema by sampling documents.",
         inputSchema: {
           type: "object",
           properties: {
             collection: { type: "string", description: "Name of the collection to analyze" },
-            sampleSize: { type: "number", default: 10, description: "Number of documents to inspect for schema analysis" }
+            sampleSize: { type: "number", default: 10, description: "Number of documents to sample" }
           },
           required: ["collection"]
         }
       },
       {
         name: "query_documents",
-        description: "Searches documents from a specific collection using standard MongoDB filter syntax.",
+        description: "Searches documents from a collection using MongoDB filter syntax.",
         inputSchema: {
           type: "object",
           properties: {
-            collection: { type: "string", description: "Name of the collection to query" },
-            filter: { type: "object", description: "Standard MongoDB query filter object, e.g., { 'status': 'active' }" },
-            projection: { type: "object", description: "Fields to include or exclude, e.g., { 'name': 1, 'email': 1 }" },
-            limit: { type: "number", default: 20, description: "Maximum number of documents to return (cap at 100)" },
-            skip: { type: "number", default: 0, description: "Number of documents to skip for pagination" }
+            collection: { type: "string", description: "Collection name" },
+            filter: { type: "object", description: "MongoDB query filter" },
+            projection: { type: "object", description: "Fields to include/exclude" },
+            limit: { type: "number", default: 20, description: "Max documents to return (cap 100)" },
+            skip: { type: "number", default: 0, description: "Documents to skip for pagination" }
           },
           required: ["collection"]
         }
@@ -87,229 +84,169 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: "object",
           properties: {
-            collection: { type: "string", description: "Name of the collection" },
-            document: { type: "object", description: "The document object to insert" }
+            collection: { type: "string", description: "Collection name" },
+            document: { type: "object", description: "Document to insert" }
           },
           required: ["collection", "document"]
         }
       },
       {
         name: "aggregate",
-        description: "Runs a custom aggregation pipeline query on a collection.",
+        description: "Runs a MongoDB aggregation pipeline on a collection.",
         inputSchema: {
           type: "object",
           properties: {
-            collection: { type: "string", description: "Name of the collection" },
-            pipeline: { type: "array", items: { type: "object" }, description: "MongoDB aggregation pipeline array" }
+            collection: { type: "string", description: "Collection name" },
+            pipeline: { type: "array", items: { type: "object" }, description: "Aggregation pipeline" }
           },
           required: ["collection", "pipeline"]
         }
       }
     ]
-  };
-});
+  }));
 
-/**
- * Handle tool execution calls
- */
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const database = await getDb();
-  const { name, arguments: args } = request.params;
+  // ─── Tool execution ─────────────────────────────────────────────────────────
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const database = await getDb();
+    const { name, arguments: args } = request.params;
 
-  try {
-    switch (name) {
-      case "list_collections": {
-        const collections = await database.listCollections().toArray();
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(collections.map(col => col.name), null, 2)
-            }
-          ]
-        };
-      }
-
-      case "get_schema": {
-        const colName = args?.collection as string;
-        const sampleSize = (args?.sampleSize as number) || 10;
-        
-        if (!colName) {
-          throw new McpError(ErrorCode.InvalidParams, "Collection parameter is required");
-        }
-
-        const collection = database.collection(colName);
-        const docs = await collection.find({}).limit(sampleSize).toArray();
-
-        if (docs.length === 0) {
+    try {
+      switch (name) {
+        case "list_collections": {
+          const collections = await database.listCollections().toArray();
           return {
-            content: [
-              {
-                type: "text",
-                text: `Collection "${colName}" is empty. Schema could not be analyzed.`
-              }
-            ]
+            content: [{ type: "text", text: JSON.stringify(collections.map(c => c.name), null, 2) }]
           };
         }
 
-        // Aggregate key types across sampled documents
-        const schema: Record<string, string[]> = {};
-        docs.forEach(doc => {
-          Object.keys(doc).forEach(key => {
-            const val = doc[key];
-            let type: string = typeof val;
-            if (val === null) type = "null";
-            else if (Array.isArray(val)) type = "array";
-            else if (val instanceof Date) type = "date";
-            else if (val instanceof Object && val._bsontype) type = val._bsontype; // BSON types
+        case "get_schema": {
+          const colName = args?.collection as string;
+          if (!colName) throw new McpError(ErrorCode.InvalidParams, "Collection parameter is required");
+          const sampleSize = (args?.sampleSize as number) || 10;
+          const docs = await database.collection(colName).find({}).limit(sampleSize).toArray();
+          if (docs.length === 0) return { content: [{ type: "text", text: `Collection "${colName}" is empty.` }] };
 
-            if (!schema[key]) {
-              schema[key] = [];
-            }
-            if (!schema[key].includes(type)) {
-              schema[key].push(type);
-            }
+          const schema: Record<string, string[]> = {};
+          docs.forEach(doc => {
+            Object.keys(doc).forEach(key => {
+              const val = doc[key];
+              let type: string = typeof val;
+              if (val === null) type = "null";
+              else if (Array.isArray(val)) type = "array";
+              else if (val instanceof Date) type = "date";
+              else if (val instanceof Object && (val as any)._bsontype) type = (val as any)._bsontype;
+              if (!schema[key]) schema[key] = [];
+              if (!schema[key].includes(type)) schema[key].push(type);
+            });
           });
-        });
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({
-                collection: colName,
-                sampledDocuments: docs.length,
-                schema: schema
-              }, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "query_documents": {
-        const colName = args?.collection as string;
-        const filter = (args?.filter as Document) || {};
-        const projection = (args?.projection as Document) || {};
-        const limit = Math.min((args?.limit as number) || 20, 100);
-        const skip = (args?.skip as number) || 0;
-
-        if (!colName) {
-          throw new McpError(ErrorCode.InvalidParams, "Collection parameter is required");
+          return { content: [{ type: "text", text: JSON.stringify({ collection: colName, sampledDocuments: docs.length, schema }, null, 2) }] };
         }
 
-        const collection = database.collection(colName);
-        const results = await collection
-          .find(filter)
-          .project(projection)
-          .skip(skip)
-          .limit(limit)
-          .toArray();
+        case "query_documents": {
+          const colName = args?.collection as string;
+          if (!colName) throw new McpError(ErrorCode.InvalidParams, "Collection parameter is required");
+          const filter = (args?.filter as Document) || {};
+          const projection = (args?.projection as Document) || {};
+          const limit = Math.min((args?.limit as number) || 20, 100);
+          const skip = (args?.skip as number) || 0;
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(results, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "insert_document": {
-        const colName = args?.collection as string;
-        const document = args?.document as Document;
-
-        if (!colName || !document) {
-          throw new McpError(ErrorCode.InvalidParams, "Both collection and document parameters are required");
+          const results = await database.collection(colName)
+            .find(filter).project(projection).skip(skip).limit(limit).toArray();
+          return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
         }
 
-        const collection = database.collection(colName);
-        const result = await collection.insertOne(document);
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({
-                success: true,
-                insertedId: result.insertedId
-              }, null, 2)
-            }
-          ]
-        };
-      }
-
-      case "aggregate": {
-        const colName = args?.collection as string;
-        const pipeline = args?.pipeline as Document[];
-
-        if (!colName || !pipeline) {
-          throw new McpError(ErrorCode.InvalidParams, "Both collection and pipeline parameters are required");
+        case "insert_document": {
+          const colName = args?.collection as string;
+          const document = args?.document as Document;
+          if (!colName || !document) throw new McpError(ErrorCode.InvalidParams, "Both collection and document are required");
+          const result = await database.collection(colName).insertOne(document);
+          return { content: [{ type: "text", text: JSON.stringify({ success: true, insertedId: result.insertedId }, null, 2) }] };
         }
 
-        const collection = database.collection(colName);
-        const results = await collection.aggregate(pipeline).toArray();
+        case "aggregate": {
+          const colName = args?.collection as string;
+          const pipeline = args?.pipeline as Document[];
+          if (!colName || !pipeline) throw new McpError(ErrorCode.InvalidParams, "Both collection and pipeline are required");
+          const results = await database.collection(colName).aggregate(pipeline).toArray();
+          return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
+        }
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(results, null, 2)
-            }
-          ]
-        };
+        default:
+          throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
       }
-
-      default:
-        throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+    } catch (err: any) {
+      console.error(`Error executing tool ${name}:`, err);
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Error executing database command: ${err.message}` }]
+      };
     }
-  } catch (err: any) {
-    console.error(`Error executing tool ${name}:`, err);
-    return {
-      isError: true,
-      content: [
-        {
-          type: "text",
-          text: `Error executing database command: ${err.message}`
-        }
-      ]
-    };
-  }
-});
+  });
 
-// Start the MCP server (supports Stdio or SSE transport dynamically)
+  return server;
+}
+
+// ─── Server startup ────────────────────────────────────────────────────────────
 async function startServer() {
   const PORT = process.env.PORT;
 
   if (PORT) {
-    // If PORT is defined (e.g. on Google Cloud Run), start as an SSE Express Server
-    const app = express();
-    app.use(express.json());
+    // Use the official SDK Express factory — handles body parsing correctly
+    const app = createMcpExpressApp({ host: '0.0.0.0' });
 
-    let sseTransport: SSEServerTransport | null = null;
+    // Session store: maps Mcp-Session-Id -> transport
+    const transports: Record<string, StreamableHTTPServerTransport | SSEServerTransport> = {};
 
-    app.get("/sse", async (req, res) => {
-      console.error("New SSE connection requested.");
-      sseTransport = new SSEServerTransport("/messages", res);
-      await server.connect(sseTransport);
-    });
+    // ── Streamable HTTP (2025-11-25) — used by Google Cloud Agent Platform ──
+    const mcpHandler = async (req: Request, res: Response) => {
+      console.error(`[MCP] ${req.method} ${req.originalUrl}`);
+      try {
+        const sessionId = req.headers["mcp-session-id"] as string | undefined;
+        let transport: StreamableHTTPServerTransport;
 
-    app.post("/messages", async (req, res) => {
-      if (sseTransport) {
-        await sseTransport.handlePostMessage(req, res);
-      } else {
-        res.status(400).send("SSE connection not established yet. Call GET /sse first.");
+        if (sessionId && transports[sessionId] instanceof StreamableHTTPServerTransport) {
+          transport = transports[sessionId] as StreamableHTTPServerTransport;
+        } else if (!sessionId && req.method === "POST" && isInitializeRequest(req.body)) {
+          transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => randomUUID(),
+            onsessioninitialized: (sid) => {
+              console.error(`[MCP] Session initialized: ${sid}`);
+              transports[sid] = transport;
+            }
+          });
+          transport.onclose = () => {
+            const sid = transport.sessionId;
+            if (sid && transports[sid]) {
+              console.error(`[MCP] Session closed: ${sid}`);
+              delete transports[sid];
+            }
+          };
+          await buildMcpServer().connect(transport);
+        } else {
+          res.status(400).json({ jsonrpc: "2.0", error: { code: -32000, message: "Bad Request: no valid session" }, id: null });
+          return;
+        }
+
+        await transport.handleRequest(req, res, req.body);
+      } catch (err: any) {
+        console.error("[MCP] Error:", err);
+        if (!res.headersSent) res.status(500).json({ error: err.message });
       }
-    });
+    };
+
+    // Both /mcp and /sse route to the same modern handler
+    app.all("/mcp", mcpHandler);
+    app.all("/sse", mcpHandler);
 
     app.listen(PORT, () => {
-      console.error(`MongoDB MCP Server running as SSE Service on port ${PORT}`);
+      console.error(`MongoDB MCP Server running on port ${PORT}`);
     });
   } else {
-    // Default to local Stdio transport (for Claude Desktop / local CLI testing)
+    // Stdio for local Claude Desktop / CLI usage
     const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.error("MongoDB Model Context Protocol (MCP) Server is listening on stdin/stdout...");
+    await buildMcpServer().connect(transport);
+    console.error("MongoDB MCP Server listening on stdin/stdout...");
   }
 }
 

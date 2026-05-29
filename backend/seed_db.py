@@ -11,17 +11,17 @@ try:
 except ImportError:
     pass
 
-MONGO_URI = os.getenv("MONGO_URI")
+MONGODB_URI = os.getenv("MONGODB_URI")
 
-if not MONGO_URI:
-    print("❌ Error: MONGO_URI environment variable is not set.")
+if not MONGODB_URI:
+    print("❌ Error: MONGODB_URI environment variable is not set.")
     print("Please set it in your .env file or export it in your terminal.")
     sys.exit(1)
 
 def seed_database():
     try:
         # Establish connection to the MongoDB cluster
-        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
         client.server_info() # Validate connection
         
         # Define database name (matches the backend / mcp settings)
@@ -139,7 +139,7 @@ def seed_database():
         print("\n🎉 Database successfully populated with Spatial Optician mock data!")
         
     except ConnectionFailure:
-        print("❌ Error: Could not connect to MongoDB Atlas. Check your MONGO_URI or IP Whitelist.")
+        print("❌ Error: Could not connect to MongoDB Atlas. Check your MONGODB_URI or IP Whitelist.")
     except Exception as e:
         print(f"❌ An error occurred: {e}")
 

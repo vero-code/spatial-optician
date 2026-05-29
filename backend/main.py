@@ -2,9 +2,14 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
+import os
 import time
 import random
 from pymongo import MongoClient
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if it exists
+load_dotenv()
 
 app = FastAPI(
     title="Spatial Optician API",
@@ -22,16 +27,24 @@ app.add_middleware(
 )
 
 # MongoDB connection settings
-MONGODB_URI = "mongodb://localhost:27017/spatial_optician"
+MONGODB_URI = os.getenv("MONGODB_URI") or "mongodb://localhost:27017/spatial_optician"
 db = None
 
 # Proactively try to connect to MongoDB
 try:
-    client = MongoClient(MONGODB_URI)
+    client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+    # Parse default database name if provided in URI, else default to 'spatial_optician'
     db = client.get_default_database()
     print("FastAPI successfully connected to MongoDB!")
 except Exception as e:
-    print(f"Warning: MongoDB connection offline. Running in sandbox-mode. Error: {e}")
+    try:
+        if 'client' in locals() and client:
+            db = client["spatial_optician"]
+            print("FastAPI successfully connected to MongoDB (spatial_optician database)!")
+        else:
+            raise e
+    except Exception as inner_e:
+        print(f"Warning: MongoDB connection offline. Running in sandbox-mode. Error: {inner_e}")
 
 class SpatialAnalysisResult(BaseModel):
     site_reference: str
