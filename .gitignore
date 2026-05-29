@@ -18,5 +18,3 @@ frontend/coverage/
 
 # MCP MongoDB Server
 mcp-mongo/build/
-
-README.md
