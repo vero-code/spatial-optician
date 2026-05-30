@@ -86,9 +86,12 @@ export default function App() {
         body: JSON.stringify({ session_id: sessionId, message: userMsg })
       });
       const data = await res.json();
-      setChatMessages(prev => [...prev, { role: 'agent', text: data.message }]);
-    } catch (err) {
-      setChatMessages(prev => [...prev, { role: 'agent', text: 'ERROR CONNECTING TO AGENT PLATFORM.' }]);
+      if (!res.ok) {
+        throw new Error(data.detail || "Server error occurred");
+      }
+      setChatMessages(prev => [...prev, { role: 'agent', text: data.message || "No response received from agent." }]);
+    } catch (err: any) {
+      setChatMessages(prev => [...prev, { role: 'agent', text: `ERROR: ${err.message || 'FAILED TO CONNECT TO AGENT PLATFORM.'}` }]);
     } finally {
       setIsTyping(false);
     }
@@ -364,7 +367,7 @@ export default function App() {
               <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {msg.role === 'agent' && <div className="shrink-0 mt-1 opacity-70"><Bot size={14} /></div>}
                 <div className={`p-3 max-w-[85%] border break-words ${msg.role === 'user' ? 'bg-white/10 border-white/30 text-right' : 'bg-transparent border-white/10 text-left'}`}>
-                  {msg.text.split('\\n').map((line, i) => (
+                  {(msg.text || '').split('\\n').map((line, i) => (
                     <span key={i}>{line}<br/></span>
                   ))}
                 </div>

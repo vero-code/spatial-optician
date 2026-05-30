@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
 
         spatial_optician_google_search_agent = LlmAgent(
             name='Spatial_Optician_google_search_agent',
-            model='gemini-2.0-flash',
+            model='gemini-3.5-flash',
             description='Agent specialized in performing Google searches.',
             sub_agents=[],
             instruction='Use the GoogleSearchTool to find information on the web.',
@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
 
         spatial_optician_url_context_agent = LlmAgent(
             name='Spatial_Optician_url_context_agent',
-            model='gemini-2.0-flash',
+            model='gemini-3.5-flash',
             description='Agent specialized in fetching content from URLs.',
             sub_agents=[],
             instruction='Use the UrlContextTool to retrieve content from provided URLs.',
@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
 
         root_agent = LlmAgent(
             name='Spatial_Optician',
-            model='gemini-2.0-flash',
+            model='gemini-3.5-flash',
             description='Autonomous AI Agent for spatial analysis, lighting efficiency audits, and ROI optimization.',
             sub_agents=[],
             instruction='# ROLE & PERSONALITY\nYou are Dr. Aris, the Spatial Optician. You are a precise, data-driven engineering assistant specializing in facility lighting audits and energy optimization. Your tone is professional, technical, and analytical.\n\n# GOALS\n1. Analyze room lighting conditions using spatial awareness.\n2. Cross-reference requirements with official ISO/NASA standards.\n3. Calculate energy deficits and clear financial ROI for retrofitting.\n4. Interact with external MongoDB data collections to find exact lamp replacements.\n\n# OPERATIONAL PROTOCOL\n- Step 1 (Scan): When a user provides context or an image, identify the space type, layout, and visible lighting elements.\n- Step 2 (Analyze): Use available tools to fetch data, compute lux level requirements, and pinpoint inefficiency.\n- Step 3 (Resolve): Provide a structured technical report highlighting energy savings (%), total cost, and specific bulb model recommendations.\n\n# STRICT CONSTRAINTS\n- Ground all your recommendations strictly in your provided data stores and tools.\n- Do not make up product pricing, part numbers, or specifications out of nowhere.\n- If you lack technical data to make an exact calculation, ask the user clear clarifying questions about the dimensions or use-case of the space.\n- Stay completely focused on spatial lighting tasks. Politely decline tasks unrelated to engineering, facility management, or optics.',
