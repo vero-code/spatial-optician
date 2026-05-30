@@ -1,6 +1,6 @@
 # Spatial Optician Project Architecture
 
-**Spatial Optician** is an intelligent analytical platform designed for performing energy-efficient facility lighting audits, calculating retrofitting Return on Investment (ROI), and conducting automated fixture selection. The system is powered by an AI Agent (Gemini 3.5 Flash) integrated via **Google ADK (Agent Development Kit)** and the **Model Context Protocol (MCP)**.
+**Spatial Optician** is an intelligent analytical platform designed for performing energy-efficient facility lighting audits, calculating retrofitting Return on Investment (ROI), and conducting automated fixture selection. Supported by the **MongoDB for Startups** program, the system leverages high-performance cloud databases and a custom Model Context Protocol (MCP) gateway to deliver real-time, data-driven recommendations powered by an AI Agent (Gemini 3.5 Flash) integrated via **Google ADK (Agent Development Kit)**.
 
 The project is composed of three main components:
 1. **Frontend (Client Application)**: A modern user interface styled as an interactive engineering blueprint.
@@ -16,12 +16,12 @@ The following diagram illustrates how the system components interact:
 ```mermaid
 graph TD
     %% Components
-    subgraph Frontend [Frontend (React + Vite)]
+    subgraph Frontend [Frontend]
         UI[Dashboard & Blueprint Workspace]
         Chat[Dr. Aris Chat Interface]
     end
 
-    subgraph Backend [Backend (FastAPI & Google ADK)]
+    subgraph Backend [Backend]
         API[FastAPI Router]
         ADK[Root Agent: Dr. Aris]
         SubSearch[Google Search Agent]

@@ -1,6 +1,14 @@
 # Spatial Optician
 
-**Spatial Optician** is an intelligent analytical platform designed for performing energy-efficient facility lighting audits, calculating retrofitting Return on Investment (ROI), and conducting automated fixture selection. The system is powered by an AI Agent (Gemini 3.5 Flash) integrated via **Google ADK (Agent Development Kit)** and the **Model Context Protocol (MCP)**.
+[![MongoDB for Startups](https://img.shields.io/badge/MongoDB_for_Startups-Supported-emerald?style=for-the-badge&logo=mongodb&logoColor=white)](https://www.mongodb.com/startups)
+[![MongoDB](https://img.shields.io/badge/MongoDB-%234ea94b.svg?style=for-the-badge&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![React 19](https://img.shields.io/badge/React%2019-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)](https://react.dev/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-%23009688.svg?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-%23007acc.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Python](https://img.shields.io/badge/Python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://www.python.org/)
+[![Gemini](https://img.shields.io/badge/Gemini%203.5%20Flash-121011?style=for-the-badge&logo=google-gemini&logoColor=white)](https://deepmind.google/technologies/gemini/)
+
+**Spatial Optician** is an intelligent analytical platform designed for performing energy-efficient facility lighting audits, calculating retrofitting Return on Investment (ROI), and conducting automated fixture selection. Supported by the **MongoDB for Startups** program, the system leverages high-performance cloud databases and a custom Model Context Protocol (MCP) gateway to deliver real-time, data-driven recommendations powered by an AI Agent (Gemini 3.5 Flash) integrated via **Google ADK (Agent Development Kit)**.
 
 The user interface is uniquely styled as an interactive engineering blueprint workspace, catering to facility managers and optics engineers alike.
 
