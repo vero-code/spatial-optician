@@ -243,7 +243,7 @@ async function startServer() {
       console.error(`MongoDB MCP Server running on port ${PORT}`);
     });
   } else {
-    // Stdio for local Claude Desktop / CLI usage
+    // Stdio for local MCP host / CLI usage
     const transport = new StdioServerTransport();
     await buildMcpServer().connect(transport);
     console.error("MongoDB MCP Server listening on stdin/stdout...");

@@ -132,7 +132,16 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex gap-4 items-center">
+        <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-end">
+           <BlueprintBox className="p-3 bg-emerald-950/20 border-dashed border-emerald-500/50 flex items-center gap-3">
+             <svg className="w-4 h-4 text-emerald-400 shrink-0" viewBox="0 0 32 32" fill="currentColor">
+               <path d="M16 2C16 2 9 8 9 16C9 23 14 28 16 30C18 28 23 23 23 16C23 8 16 2 16 2ZM16 26C16 26 13.5 22.5 13.5 16C13.5 10.5 16 7 16 7C16 7 18.5 10.5 18.5 16C18.5 22.5 16 26 16 26Z"/>
+             </svg>
+             <div className="text-[10px] uppercase tracking-widest text-emerald-300 font-mono leading-none">
+               Supported by <span className="font-bold text-white whitespace-nowrap">MongoDB for Startups</span>
+             </div>
+           </BlueprintBox>
+
            <BlueprintBox className="p-3 bg-white/5 border-dashed">
              <div className="flex gap-4 text-xs uppercase tracking-widest opacity-80">
                <div className="flex items-center gap-1"><Compass size={14} /> 40.7128°N</div>

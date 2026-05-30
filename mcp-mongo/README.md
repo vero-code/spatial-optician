@@ -1,11 +1,11 @@
 # MongoDB MCP Server
 
-This server allows AI agents (such as Google Cloud Agent Platform and Claude Desktop) to directly interact with a **MongoDB** database via the Model Context Protocol (MCP).
+This server allows AI agents (such as Google Cloud Agent Platform and other MCP-compatible host applications) to directly interact with a **MongoDB** database via the Model Context Protocol (MCP).
 
 Written in Node.js + TypeScript, it is designed with a **primary focus on cloud deployment for hackathons** via Google Cloud Run, while also supporting local testing.
 
 - **Streamable HTTP** — Main mode for cloud deployment on Google Cloud Run (used by Google Cloud Agent Platform).
-- **Stdio** — Alternative mode for local testing (Claude Desktop, CLI).
+- **Stdio** — Alternative mode for local testing (CLI, local MCP hosts).
 
 ## Available Tools
 
@@ -68,9 +68,9 @@ The server accepts requests on `/sse` and `/mcp` using the Streamable HTTP proto
 
 ---
 
-## Alternative: Local Testing (Claude Desktop)
+## Alternative: Local Testing (Local MCP Host)
 
-While the primary goal is cloud deployment, you can test the server locally using Claude Desktop. [Claude Desktop](https://claude.ai/download) is the official application by Anthropic (the creators of the MCP standard). It features native support for running local MCP servers via standard input/output (`stdio`), making it the ideal tool for local testing before deploying to the cloud.
+While the primary goal is cloud deployment, you can test the server locally using any standard local MCP host. An MCP host with native support for running local MCP servers via standard input/output (`stdio`) is ideal for local testing before deploying to the cloud.
 
 ### 1. Local Build
 
@@ -80,9 +80,9 @@ npm install
 npm run build
 ```
 
-### 2. Connecting to Claude Desktop
+### 2. Connecting to a Local MCP Host
 
-Add the following configuration to `%APPDATA%\Claude\claude_desktop_config.json` (on Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (on macOS):
+Add the following configuration to your local MCP host configuration file:
 
 ```json
 {
