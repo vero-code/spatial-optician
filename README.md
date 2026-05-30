@@ -17,6 +17,10 @@ The user interface is uniquely styled as an interactive engineering blueprint wo
 A comprehensive breakdown of components, databases, data structures, and multi-agent interaction flows can be found in the:
 👉 **[ARCHITECTURE.md](./ARCHITECTURE.md)**
 
+> [!TIP]
+> **Key Showcase: Agentic Self-Healing Catalog Expansion**
+> If a requested lighting fixture is missing from the database, our Gemini agent dynamically triggers a live web search (via the `GoogleSearchTool`), extracts the precise engineering specifications, and uses the custom MCP `insert_document` tool to **dynamically write the new fixture back into the MongoDB database**, completing the ROI calculations on the fly!
+
 ## 🚀 Quick Start Guide
 
 ### 1. Database Configuration (MongoDB)

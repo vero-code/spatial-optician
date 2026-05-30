@@ -125,6 +125,10 @@ The system implements a hierarchical multi-agent framework led by a Root Agent:
 3. **MCP Tool Integration (`McpToolset`)**:
    * Connected to the external MongoDB MCP Server via Server-Sent Events (SSE) at: `https://spatial-optician-mcp-601334765015.europe-west1.run.app/sse`. This allows Dr. Aris to dynamically query the database catalog and tables.
 
+> [!NOTE]
+> **Google Cloud Agent Builder Ecosystem Compliance:**
+> As confirmed by the Google Cloud hackathon management team, implementing the agent in code via **Google ADK (Agent Development Kit)** using Python's `LlmAgent` is fully compliant with the requirements of using the *Google Cloud Agent Builder* ecosystem. Prototyping via ADK enables seamless runtime bindings on Cloud Run and a highly customized React blueprint UI.
+
 ### Primary API Endpoints:
 * `GET /health` — Verifies server health and database connectivity.
 * `POST /api/analyze` — Simulates depth/optical analysis of uploaded floor scans, saves metadata to MongoDB, and returns calculated results.
@@ -197,3 +201,11 @@ The `spatial_optician` (or `spatial_optician_db`) database consists of:
 2. The frontend transmits the file via `multipart/form-data` to `/api/analyze`.
 3. The FastAPI server processes the request, computes simulated optical parameters (lux deficits, diffusion, spatial efficiency), and writes the document to the `analyses` collection in MongoDB.
 4. The calculation payload is returned to the React client, instantly updating the blueprint dashboards and widgets.
+
+### Scenario C: Agentic Self-Healing & Dynamic Database Writes (Catalog Expansion)
+1. **Initial DB Query:** The user requests retrofitting options for a lighting fixture model not present in the pre-seeded MongoDB `equipment_catalog` collection.
+2. **Missing Spec Detection:** The agent runs a `query_documents` call on the catalog and detects an empty result payload.
+3. **Live Web Search:** Instead of stalling, the agent delegates to the `spatial_optician_google_search_agent` sub-agent, issuing a query through the `GoogleSearchTool` to locate the exact technical specs of suitable energy-efficient replacements on the live web.
+4. **Data Extraction:** The agent processes the web search response and parses the fixture's metadata (model ID, lumens, watts, lifespan, cost, and compatibility).
+5. **Database Writeback (MCP Tool Call):** The agent invokes the MCP tool `insert_document` on the `equipment_catalog` collection, dynamically writing the new fixture document directly into the live MongoDB database.
+6. **Final Computation:** With the newly acquired data stored, the agent re-runs the ROI computations and renders a completed payback analysis report to the user.
