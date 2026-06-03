@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Compass, 
   Ruler, 
@@ -9,9 +9,7 @@ import {
   DraftingCompass,
   ArrowRight,
   Info,
-  Send,
-  Bot,
-  User
+  Bot
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -58,53 +56,71 @@ const DimensionLine = ({ label, className = "" }: { label: string, className?: s
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8000';
 
+const parseBoldText = (text: string) => {
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i} className="text-white font-bold">{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+};
+
+const formatReportText = (text: string) => {
+  if (!text) return null;
+  const lines = text.split('\n');
+  return lines.map((line, index) => {
+    const trimmed = line.trim();
+    
+    // Header 3
+    if (trimmed.startsWith('###')) {
+      const content = parseBoldText(trimmed.replace(/^###\s*/, ''));
+      return <h4 key={index} className="text-sm font-bold uppercase tracking-wider text-white mt-4 mb-2 border-b border-white/20 pb-0.5">{content}</h4>;
+    }
+    // Header 2
+    if (trimmed.startsWith('##')) {
+      const content = parseBoldText(trimmed.replace(/^##\s*/, ''));
+      return <h3 key={index} className="text-base font-bold uppercase tracking-widest text-white mt-5 mb-2 border-b border-white/40 pb-1">{content}</h3>;
+    }
+    // Header 1
+    if (trimmed.startsWith('#')) {
+      const content = parseBoldText(trimmed.replace(/^#\s*/, ''));
+      return <h2 key={index} className="text-lg font-extrabold uppercase tracking-widest text-white mt-6 mb-3 border-b-2 border-white pb-1">{content}</h2>;
+    }
+    
+    // Bullet list item
+    if (trimmed.startsWith('*') || trimmed.startsWith('-')) {
+      const content = parseBoldText(trimmed.replace(/^[*-\s]+/, ''));
+      return (
+        <div key={index} className="flex gap-2 items-start ml-4 my-1">
+          <span className="text-white opacity-80 mt-1 shrink-0">▪</span>
+          <span className="text-xs tracking-wide text-white/90 leading-relaxed">{content}</span>
+        </div>
+      );
+    }
+
+    // Paragraph / normal line
+    if (trimmed === '') {
+      return <div key={index} className="h-2" />;
+    }
+
+    const content = parseBoldText(line);
+    return <p key={index} className="text-xs tracking-wide text-white/90 leading-relaxed my-1.5">{content}</p>;
+  });
+};
+
 export default function App() {
   const [dragActive, setDragActive] = useState(false);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
-  const [chatMessages, setChatMessages] = useState<{role: 'user' | 'agent', text: string}[]>([
-    { role: 'agent', text: 'SYSTEM INITIALIZED. AGENT CONNECTED TO MCP DATABASE. AWAITING QUERY...' }
-  ]);
-  const [inputText, setInputText] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [sessionId] = useState(() => Math.random().toString(36).substring(7));
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages, isTyping]);
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputText.trim()) return;
-
-    const userMsg = inputText.trim();
-    setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
-    setInputText("");
-    setIsTyping(true);
-
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId, message: userMsg })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.detail || "Server error occurred");
-      }
-      setChatMessages(prev => [...prev, { role: 'agent', text: data.message || "No response received from agent." }]);
-    } catch (err: any) {
-      setChatMessages(prev => [...prev, { role: 'agent', text: `ERROR: ${err.message || 'FAILED TO CONNECT TO AGENT PLATFORM.'}` }]);
-    } finally {
-      setIsTyping(false);
-    }
-  };
 
   const processImageFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
-      setChatMessages(prev => [...prev, { role: 'agent', text: 'ERROR: Unsupported file format. Please upload an image file (JPG, PNG, WEBP, etc.).' }]);
+      setAnalysisError('ERROR: Unsupported file format. Please upload an image file (JPG, PNG, WEBP, etc.).');
+      setAnalysisResult(null);
       return;
     }
 
@@ -114,8 +130,8 @@ export default function App() {
     reader.readAsDataURL(file);
 
     setIsAnalyzingImage(true);
-    setChatMessages(prev => [...prev, { role: 'user', text: `[IMAGE UPLOADED] ${file.name}` }]);
-    setChatMessages(prev => [...prev, { role: 'agent', text: 'OPTICAL SCAN RECEIVED. INITIALIZING GEMINI VISION ANALYSIS...' }]);
+    setAnalysisError(null);
+    setAnalysisResult(null);
 
     try {
       const formData = new FormData();
@@ -129,9 +145,9 @@ export default function App() {
       if (!res.ok) {
         throw new Error(data.detail || 'Vision analysis failed');
       }
-      setChatMessages(prev => [...prev, { role: 'agent', text: data.description }]);
+      setAnalysisResult(data.description);
     } catch (err: any) {
-      setChatMessages(prev => [...prev, { role: 'agent', text: `VISION ERROR: ${err.message}` }]);
+      setAnalysisError(`VISION ERROR: ${err.message || 'FAILED TO CONNECT TO ANALYSIS AGENT'}`);
     } finally {
       setIsAnalyzingImage(false);
     }
@@ -140,7 +156,6 @@ export default function App() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) processImageFile(file);
-    // Reset so same file can be re-uploaded
     e.target.value = '';
   };
 
@@ -266,49 +281,43 @@ export default function App() {
           </motion.div>
         </div>
 
-        {/* Center Column: Photo Upload Area */}
-        <div className="lg:col-span-5">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.3 }}
-            className="h-full"
-          >
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleFileSelect}
-              id="photo-upload-input"
-            />
+        {/* Center Column: Photo Upload Area & Optical Analysis Output */}
+        <div className="lg:col-span-5 flex flex-col gap-4">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileSelect}
+            id="photo-upload-input"
+          />
 
+          <div className="h-[280px] shrink-0">
             <div
               onDragEnter={handleDrag}
               onDragLeave={handleDrag}
               onDragOver={handleDrag}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`h-full border-2 border-dashed border-white/40 bg-white/5 relative flex flex-col items-center justify-center p-12 transition-all duration-300 cursor-pointer ${
+              className={`h-full border-2 border-dashed border-white/40 bg-white/5 relative flex flex-col items-center justify-center p-6 transition-all duration-300 cursor-pointer ${
                 dragActive ? 'bg-white/15 border-white/80 scale-[1.01]' : 'hover:bg-white/8 hover:border-white/60'
               } ${isAnalyzingImage ? 'pointer-events-none' : ''}`}
             >
               {/* Corner brackets */}
-              <div className="absolute top-8 left-8 w-12 h-12 border-t-2 border-l-2 border-white/60"></div>
-              <div className="absolute top-8 right-8 w-12 h-12 border-t-2 border-r-2 border-white/60"></div>
-              <div className="absolute bottom-8 left-8 w-12 h-12 border-b-2 border-l-2 border-white/60"></div>
-              <div className="absolute bottom-8 right-8 w-12 h-12 border-b-2 border-r-2 border-white/60"></div>
+              <div className="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-white/60"></div>
+              <div className="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-white/60"></div>
+              <div className="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-white/60"></div>
+              <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-white/60"></div>
 
               {uploadedImage ? (
                 /* Image preview */
-                <div className="relative w-full h-full flex flex-col items-center justify-center gap-4">
-                  <div className="relative border border-white/30 shadow-lg overflow-hidden max-h-64 w-full">
+                <div className="relative w-full h-full flex flex-col items-center justify-center gap-2">
+                  <div className="relative border border-white/30 shadow-lg overflow-hidden h-full max-h-[180px] w-full flex items-center justify-center bg-black/10">
                     <img
                       src={uploadedImage}
                       alt="Uploaded scan"
-                      className="w-full h-full object-contain"
-                      style={{ maxHeight: '256px' }}
+                      className="max-h-full max-w-full object-contain"
                     />
                     {isAnalyzingImage && (
                       <div className="absolute inset-0 bg-[#0a2e5c]/70 flex flex-col items-center justify-center gap-3">
@@ -326,8 +335,8 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  <div className="text-center">
-                    <p className="text-[10px] uppercase tracking-widest opacity-50">Click or drop to replace image</p>
+                  <div className="text-center shrink-0">
+                    <p className="text-[9px] uppercase tracking-widest opacity-50">Click or drop to replace image</p>
                   </div>
                 </div>
               ) : (
@@ -340,37 +349,85 @@ export default function App() {
                   </div>
 
                   <div className="text-center group">
-                    <div className="mb-6 relative inline-block">
+                    <div className="mb-3 relative inline-block">
                       <motion.div
-                        whileHover={{ scale: 1.1, rotate: 5 }}
-                        animate={dragActive ? { scale: 1.15, rotate: 5 } : { scale: 1, rotate: 0 }}
-                        className="p-8 border border-white bg-[#0a2e5c]"
+                        whileHover={{ scale: 1.05, rotate: 2 }}
+                        animate={dragActive ? { scale: 1.1, rotate: 3 } : { scale: 1, rotate: 0 }}
+                        className="p-5 border border-white bg-[#0a2e5c]"
                       >
-                        <Upload className="w-12 h-12 text-white" />
+                        <Upload className="w-8 h-8 text-white" />
                       </motion.div>
-                      <div className="absolute -top-2 -right-2 w-4 h-4 bg-white"></div>
+                      <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white"></div>
                     </div>
-                    <h2 className="text-2xl uppercase tracking-tighter mb-2">Photo Upload Area</h2>
-                    <p className="text-xs opacity-50 uppercase tracking-widest max-w-[200px] mx-auto leading-relaxed">
+                    <h2 className="text-lg uppercase tracking-tighter mb-1">Photo Upload Area</h2>
+                    <p className="text-[10px] opacity-50 uppercase tracking-widest max-w-[220px] mx-auto leading-normal">
                       {dragActive ? 'Release to scan' : 'Drop architectural scan or site photo for depth extraction'}
                     </p>
-
-                    <div className="mt-8 inline-flex items-center gap-2 text-xs border border-white/40 px-4 py-2 hover:bg-white hover:text-blue-900 transition-colors uppercase tracking-widest">
-                      Browse Files <ArrowRight size={14} />
-                    </div>
                   </div>
                 </>
               )}
 
               {/* Specs at bottom of upload area */}
-              <div className="absolute bottom-4 left-4 right-4 flex justify-between text-[8px] uppercase tracking-widest opacity-40">
+              <div className="absolute bottom-2 left-4 right-4 flex justify-between text-[7px] uppercase tracking-widest opacity-40">
                 <span>BUFFER_STATUS: {isAnalyzingImage ? 'ANALYZING...' : uploadedImage ? 'SCAN_LOADED' : 'READY'}</span>
                 <span>ENC: RSA-4096 / AUTH_SYSTEM_V2</span>
               </div>
             </div>
+          </div>
 
-            <DimensionLine label="420mm x 297mm (A3 Standard)" className="mt-4" />
-          </motion.div>
+          <DimensionLine label="420mm x 297mm (A3 Standard)" className="my-1" />
+
+          {/* Analysis Report Section */}
+          <div className="flex-1 min-h-[300px] flex flex-col">
+            <BlueprintBox title="Optical Analysis Output" className="flex-1 flex flex-col relative overflow-hidden bg-white/5 p-4">
+              <div className="flex-1 overflow-y-auto max-h-[320px] pr-2 custom-scrollbar">
+                {isAnalyzingImage ? (
+                  <div className="h-full flex flex-col items-center justify-center py-12 text-center">
+                    <div className="flex gap-1.5 mb-4">
+                      {[0, 1, 2, 3, 4].map(i => (
+                        <motion.div
+                          key={i}
+                          className="w-1.5 bg-white"
+                          animate={{ height: ['10px', '32px', '10px'] }}
+                          transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.12 }}
+                        />
+                      ))}
+                    </div>
+                    <p className="text-xs uppercase tracking-widest font-mono opacity-80 animate-pulse">
+                      PROCESSING OPTICAL FRAME...
+                    </p>
+                    <p className="text-[9px] uppercase tracking-widest font-mono opacity-50 mt-1">
+                      Extracting spatial geometry & illuminance profiles
+                    </p>
+                  </div>
+                ) : analysisError ? (
+                  <div className="text-red-400 font-mono text-[11px] p-3 border border-red-500/30 bg-red-950/20 uppercase tracking-wide">
+                    {analysisError}
+                  </div>
+                ) : analysisResult ? (
+                  <div className="text-left font-mono py-1">
+                    <div className="flex justify-between items-center text-[9px] opacity-40 border-b border-white/20 pb-2 mb-4 uppercase tracking-widest">
+                      <span>REPORT_STATUS: VERIFIED</span>
+                      <span>TIMESTAMP: {new Date().toISOString().slice(0, 19).replace('T', ' ')} UTC</span>
+                    </div>
+                    <div className="space-y-3">
+                      {formatReportText(analysisResult)}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center py-12 text-center opacity-40">
+                    <Bot className="w-10 h-10 mb-3 opacity-60" strokeWidth={1} />
+                    <p className="text-[10px] uppercase tracking-widest leading-relaxed max-w-[280px]">
+                      AWAITING scan upload for spatial lighting diagnostics.
+                    </p>
+                    <p className="text-[8px] uppercase tracking-[0.2em] mt-2 opacity-50">
+                      DR. ARIS VISION AGENT OFFLINE
+                    </p>
+                  </div>
+                )}
+              </div>
+            </BlueprintBox>
+          </div>
         </div>
 
         {/* Right Column: Data Displays (Lux, ROI) */}
@@ -454,66 +511,6 @@ export default function App() {
         </div>
 
       </main>
-
-      {/* Agent Chat Widget */}
-      <div className="fixed bottom-6 left-6 right-6 md:left-auto md:right-6 md:w-[400px] z-50">
-        <div className="bg-[#0a2e5c]/95 border-2 border-white/80 p-5 relative backdrop-blur-xl shadow-2xl blueprint-border flex flex-col h-[500px]">
-          {/* Corner marks */}
-          <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-white"></div>
-          <div className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-white"></div>
-          <div className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-white"></div>
-          <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-white"></div>
-          
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/20 pb-3 mb-4 shrink-0">
-             <div className="flex items-center gap-2">
-               <Bot size={18} className="text-white" />
-               <h4 className="text-xs uppercase tracking-[0.2em] font-bold">
-                 Agent Interface <span className="inline-block ml-2 w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
-               </h4>
-             </div>
-             <span className="text-[10px] opacity-50 uppercase">Session: {sessionId.toUpperCase()}</span>
-          </div>
-
-          {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto mb-4 pr-2 space-y-4 font-mono text-[11px] leading-relaxed custom-scrollbar">
-            {chatMessages.map((msg, idx) => (
-              <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                {msg.role === 'agent' && <div className="shrink-0 mt-1 opacity-70"><Bot size={14} /></div>}
-                <div className={`p-3 max-w-[85%] border break-words ${msg.role === 'user' ? 'bg-white/10 border-white/30 text-right' : 'bg-transparent border-white/10 text-left'}`}>
-                  {(msg.text || '').split('\\n').map((line, i) => (
-                    <span key={i}>{line}<br/></span>
-                  ))}
-                </div>
-                {msg.role === 'user' && <div className="shrink-0 mt-1 opacity-70"><User size={14} /></div>}
-              </div>
-            ))}
-            {isTyping && (
-               <div className="flex gap-3 justify-start">
-                 <div className="shrink-0 mt-1 opacity-70"><Bot size={14} /></div>
-                 <div className="p-3 border border-white/10 text-left opacity-50 uppercase flex items-center gap-2">
-                   Processing <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"></span><span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></span><span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></span>
-                 </div>
-               </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input Area */}
-          <form onSubmit={handleSendMessage} className="relative shrink-0 mt-auto">
-            <input 
-              type="text" 
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="ENTER COMMAND OR QUERY..."
-              className="w-full bg-black/40 border border-white/40 text-white p-3 pr-10 text-[11px] uppercase tracking-wider font-mono outline-none focus:border-white transition-colors placeholder:opacity-40"
-            />
-            <button type="submit" disabled={isTyping} className="absolute right-2 top-1/2 -translate-y-1/2 opacity-70 hover:opacity-100 disabled:opacity-30 p-1">
-              <Send size={16} />
-            </button>
-          </form>
-        </div>
-      </div>
 
       {/* Footer Branding */}
       <footer className="mt-16 pt-8 border-t border-white/20 flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] uppercase tracking-[0.4em] opacity-40">
