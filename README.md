@@ -62,3 +62,15 @@ npm start
 * **Frontend**: React 19, Vite, TypeScript, Tailwind CSS v4, Motion, Lucide Icons.
 * **Backend**: Python, FastAPI, PyMongo, Pydantic, Google ADK (Agent Development Kit).
 * **MCP Server**: Node.js, Express, TypeScript, Model Context Protocol SDK, MongoDB Driver.
+
+## 🆕 Recent Updates
+
+* **Backend Modularization & Refactoring**: Reorganized the backend code from a monolithic `main.py` into a highly decoupled, modular structure:
+  * `config.py` — Centralized environment variables (`GEMINI_MODEL`, `MONGODB_URI`, etc.).
+  * `prompts.py` — Isolated AI agent and Vision prompt constants.
+  * `schemas.py` — Organized Pydantic request and response data models.
+  * `database.py` — Managed MongoDB client setup.
+  * `agent.py` — Constructed Google ADK agents and lifecycle hooks.
+  * `routers/` — Separated endpoints by domain (`system` for health checks, `analysis` for image scans, and `chat` for conversation).
+* **Dashboard Streamlining**: Removed the external floating chat window and replaced it with a dedicated **"Optical Analysis Output"** box directly in the dashboard's center console below the upload area. The analysis report is formatted inline with custom blueprint typography, custom scrollbars, and animated processing indicator.
+
