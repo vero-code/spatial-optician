@@ -117,6 +117,16 @@ export default function App() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // MCP Integration States
+  const [activeTab, setActiveTab] = useState<'report' | 'catalog' | 'roi'>('report');
+  const [catalogResult, setCatalogResult] = useState<string | null>(null);
+  const [roiResult, setRoiResult] = useState<string | null>(null);
+
+  const [isQueryingCatalog, setIsQueryingCatalog] = useState(false);
+  const [isCalculatingRoi, setIsCalculatingRoi] = useState(false);
+  const [isSavingAudit, setIsSavingAudit] = useState(false);
+  const [auditSaveStatus, setAuditSaveStatus] = useState<{success: boolean, text: string} | null>(null);
+
   const processImageFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       setAnalysisError('ERROR: Unsupported file format. Please upload an image file (JPG, PNG, WEBP, etc.).');
@@ -132,6 +142,12 @@ export default function App() {
     setIsAnalyzingImage(true);
     setAnalysisError(null);
     setAnalysisResult(null);
+
+    // Reset MCP States for new scan
+    setActiveTab('report');
+    setCatalogResult(null);
+    setRoiResult(null);
+    setAuditSaveStatus(null);
 
     try {
       const formData = new FormData();
@@ -150,6 +166,91 @@ export default function App() {
       setAnalysisError(`VISION ERROR: ${err.message || 'FAILED TO CONNECT TO ANALYSIS AGENT'}`);
     } finally {
       setIsAnalyzingImage(false);
+    }
+  };
+
+  const handleQueryCatalog = async () => {
+    if (!analysisResult) return;
+    setIsQueryingCatalog(true);
+    setAnalysisError(null);
+    setCatalogResult(null);
+    setActiveTab('catalog');
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: "catalog-query",
+          message: `Based on the following audit description: "${analysisResult}", use the MCP tools (such as query_documents or get_schema) to search the 'equipment_catalog' collection in the database. Find fixtures that are suitable for this facility type. Report back the recommended models, listing their brand, power, luminous flux, and unit cost. Format the output with clear headers and bullet points.`
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to query catalog");
+      
+      setCatalogResult(data.message);
+    } catch (err: any) {
+      setAnalysisError(`CATALOG ERROR: ${err.message || 'FAILED TO QUERY MCP DATABASE'}`);
+      setActiveTab('report');
+    } finally {
+      setIsQueryingCatalog(false);
+    }
+  };
+
+  const handleCalculateRoi = async () => {
+    if (!analysisResult) return;
+    setIsCalculatingRoi(true);
+    setAnalysisError(null);
+    setRoiResult(null);
+    setActiveTab('roi');
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: "roi-query",
+          message: `Based on this audit description: "${analysisResult}", calculate the financial ROI and energy savings for upgrading the current lighting to the recommended LED fixtures in our catalog. Query the 'energy_tariffs' collection in the database via MCP to find the electricity rates for NY (since the site is NY-HUD-01). Perform the calculations: current power draw vs proposed, annual cost savings, and payback period. Show your work, including database query results.`
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to calculate ROI");
+      
+      setRoiResult(data.message);
+    } catch (err: any) {
+      setAnalysisError(`ROI ERROR: ${err.message || 'FAILED TO CALCULATE ENERGY SAVINGS'}`);
+      setActiveTab('report');
+    } finally {
+      setIsCalculatingRoi(false);
+    }
+  };
+
+  const handleSaveAudit = async () => {
+    if (!analysisResult) return;
+    setIsSavingAudit(true);
+    setAuditSaveStatus(null);
+    setAnalysisError(null);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: "save-audit",
+          message: `Please record this audit findings into the 'audit_history' collection in MongoDB using the insert_document MCP tool. The site reference is 'NY-HUD-01', total area is 2500 sqm, status is 'Needs Upgrade'. Use the analyzed information from this text: "${analysisResult}". Output the confirmation with the exact insertedId returned by the database.`
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to save audit");
+      
+      setAuditSaveStatus({
+        success: true,
+        text: `AUDIT SAVED SUCCESSFUL. ${data.message}`
+      });
+    } catch (err: any) {
+      setAuditSaveStatus({
+        success: false,
+        text: `Error saving: ${err.message}`
+      });
+    } finally {
+      setIsSavingAudit(false);
     }
   };
 
@@ -380,8 +481,80 @@ export default function App() {
           {/* Analysis Report Section */}
           <div className="flex-1 min-h-[300px] flex flex-col">
             <BlueprintBox title="Optical Analysis Output" className="flex-1 flex flex-col relative overflow-hidden bg-white/5 p-4">
+              
+              {/* Tab Selector */}
+              {analysisResult && (
+                <div className="flex border-b border-white/20 mb-4 text-[9px] uppercase tracking-wider font-mono select-none">
+                  <button
+                    onClick={() => setActiveTab('report')}
+                    className={`px-3 py-1.5 border-r border-white/20 transition-all ${
+                      activeTab === 'report' ? 'bg-white/10 text-white font-bold' : 'opacity-50 hover:opacity-100'
+                    }`}
+                  >
+                    Diagnostic Report
+                  </button>
+                  <button
+                    onClick={() => { if (catalogResult) setActiveTab('catalog'); }}
+                    disabled={!catalogResult && !isQueryingCatalog}
+                    className={`px-3 py-1.5 border-r border-white/20 transition-all ${
+                      activeTab === 'catalog' ? 'bg-white/10 text-white font-bold' : 'opacity-50 disabled:opacity-20 hover:enabled:opacity-100'
+                    }`}
+                  >
+                    Database Catalog {catalogResult ? '✓' : ''}
+                  </button>
+                  <button
+                    onClick={() => { if (roiResult) setActiveTab('roi'); }}
+                    disabled={!roiResult && !isCalculatingRoi}
+                    className={`px-3 py-1.5 transition-all ${
+                      activeTab === 'roi' ? 'bg-white/10 text-white font-bold' : 'opacity-50 disabled:opacity-20 hover:enabled:opacity-100'
+                    }`}
+                  >
+                    ROI Calculations {roiResult ? '✓' : ''}
+                  </button>
+                </div>
+              )}
+
               <div className="flex-1 overflow-y-auto max-h-[320px] pr-2 custom-scrollbar">
-                {isAnalyzingImage ? (
+                {/* Active Tab Loaders */}
+                {activeTab === 'catalog' && isQueryingCatalog ? (
+                  <div className="h-full flex flex-col items-center justify-center py-12 text-center">
+                    <div className="flex gap-1.5 mb-4">
+                      {[0, 1, 2, 3, 4].map(i => (
+                        <motion.div
+                          key={i}
+                          className="w-1.5 bg-white"
+                          animate={{ height: ['10px', '32px', '10px'] }}
+                          transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.12 }}
+                        />
+                      ))}
+                    </div>
+                    <p className="text-xs uppercase tracking-widest font-mono opacity-80 animate-pulse">
+                      QUERYING DATABASE CATALOG VIA MCP...
+                    </p>
+                    <p className="text-[9px] uppercase tracking-widest font-mono opacity-50 mt-1">
+                      Searching equipment_catalog collection for matching models
+                    </p>
+                  </div>
+                ) : activeTab === 'roi' && isCalculatingRoi ? (
+                  <div className="h-full flex flex-col items-center justify-center py-12 text-center">
+                    <div className="flex gap-1.5 mb-4">
+                      {[0, 1, 2, 3, 4].map(i => (
+                        <motion.div
+                          key={i}
+                          className="w-1.5 bg-white"
+                          animate={{ height: ['10px', '32px', '10px'] }}
+                          transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.12 }}
+                        />
+                      ))}
+                    </div>
+                    <p className="text-xs uppercase tracking-widest font-mono opacity-80 animate-pulse">
+                      RETRIEVING TARIFFS & CALCULATING ROI...
+                    </p>
+                    <p className="text-[9px] uppercase tracking-widest font-mono opacity-50 mt-1">
+                      Running energy savings calculations with NY-HUD database parameters
+                    </p>
+                  </div>
+                ) : isAnalyzingImage ? (
                   <div className="h-full flex flex-col items-center justify-center py-12 text-center">
                     <div className="flex gap-1.5 mb-4">
                       {[0, 1, 2, 3, 4].map(i => (
@@ -404,30 +577,89 @@ export default function App() {
                   <div className="text-red-400 font-mono text-[11px] p-3 border border-red-500/30 bg-red-950/20 uppercase tracking-wide">
                     {analysisError}
                   </div>
-                ) : analysisResult ? (
+                ) : (
+                  /* Render corresponding tab data */
                   <div className="text-left font-mono py-1">
                     <div className="flex justify-between items-center text-[9px] opacity-40 border-b border-white/20 pb-2 mb-4 uppercase tracking-widest">
                       <span>REPORT_STATUS: VERIFIED</span>
-                      <span>TIMESTAMP: {new Date().toISOString().slice(0, 19).replace('T', ' ')} UTC</span>
+                      <span>
+                        TAB: {activeTab === 'report' ? 'DIAGNOSTIC' : activeTab === 'catalog' ? 'EQUIPMENT_CATALOG' : 'ROI_METRICS'}
+                      </span>
                     </div>
                     <div className="space-y-3">
-                      {formatReportText(analysisResult)}
+                      {activeTab === 'report' && formatReportText(analysisResult)}
+                      {activeTab === 'catalog' && formatReportText(catalogResult)}
+                      {activeTab === 'roi' && formatReportText(roiResult)}
+                      
+                      {activeTab === 'report' && !analysisResult && (
+                        <div className="h-full flex flex-col items-center justify-center py-12 text-center opacity-40">
+                          <Bot className="w-10 h-10 mb-3 opacity-60" strokeWidth={1} />
+                          <p className="text-[10px] uppercase tracking-widest leading-relaxed max-w-[280px]">
+                            AWAITING scan upload for spatial lighting diagnostics.
+                          </p>
+                          <p className="text-[8px] uppercase tracking-[0.2em] mt-2 opacity-50">
+                            DR. ARIS VISION AGENT OFFLINE
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center py-12 text-center opacity-40">
-                    <Bot className="w-10 h-10 mb-3 opacity-60" strokeWidth={1} />
-                    <p className="text-[10px] uppercase tracking-widest leading-relaxed max-w-[280px]">
-                      AWAITING scan upload for spatial lighting diagnostics.
-                    </p>
-                    <p className="text-[8px] uppercase tracking-[0.2em] mt-2 opacity-50">
-                      DR. ARIS VISION AGENT OFFLINE
-                    </p>
                   </div>
                 )}
               </div>
             </BlueprintBox>
           </div>
+
+          {/* AI MCP Action Panel */}
+          {analysisResult && (
+            <div className="space-y-2">
+              {auditSaveStatus && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`p-3 text-[10px] font-mono uppercase border ${
+                    auditSaveStatus.success 
+                      ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-300' 
+                      : 'border-red-500/50 bg-red-950/20 text-red-300'
+                  }`}
+                >
+                  <div className="flex justify-between items-center">
+                    <span>{auditSaveStatus.text}</span>
+                    <button onClick={() => setAuditSaveStatus(null)} className="ml-2 font-bold hover:text-white">✕</button>
+                  </div>
+                </motion.div>
+              )}
+              
+              <div className="grid grid-cols-3 gap-2 text-[10px] font-mono tracking-wider">
+                <button
+                  onClick={handleQueryCatalog}
+                  disabled={isQueryingCatalog || isAnalyzingImage || isCalculatingRoi || isSavingAudit}
+                  className={`p-3 border border-white/40 uppercase hover:bg-white hover:text-blue-900 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none ${
+                    isQueryingCatalog ? 'bg-white text-blue-900 font-bold' : ''
+                  }`}
+                >
+                  🔍 Find Fixtures
+                </button>
+                <button
+                  onClick={handleCalculateRoi}
+                  disabled={isCalculatingRoi || isAnalyzingImage || isQueryingCatalog || isSavingAudit}
+                  className={`p-3 border border-white/40 uppercase hover:bg-white hover:text-blue-900 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none ${
+                    isCalculatingRoi ? 'bg-white text-blue-900 font-bold' : ''
+                  }`}
+                >
+                  ⚡ Calculate ROI
+                </button>
+                <button
+                  onClick={handleSaveAudit}
+                  disabled={isSavingAudit || isAnalyzingImage || isQueryingCatalog || isCalculatingRoi}
+                  className={`p-3 border border-white/40 uppercase hover:bg-white hover:text-blue-900 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none ${
+                    isSavingAudit ? 'bg-white text-blue-900 font-bold' : ''
+                  }`}
+                >
+                  💾 Save Audit
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Column: Data Displays (Lux, ROI) */}

@@ -71,6 +71,8 @@ npm start
   * `schemas.py` — Organized Pydantic request and response data models.
   * `database.py` — Managed MongoDB client setup.
   * `agent.py` — Constructed Google ADK agents and lifecycle hooks.
-  * `routers/` — Separated endpoints by domain (`system` for health checks, `analysis` for image scans, and `chat` for conversation).
-* **Dashboard Streamlining**: Removed the external floating chat window and replaced it with a dedicated **"Optical Analysis Output"** box directly in the dashboard's center console below the upload area. The analysis report is formatted inline with custom blueprint typography, custom scrollbars, and animated processing indicator.
+* **Dashboard Streamlining & Live MCP Controls**: Removed the external floating chat window and replaced it with a dedicated **"Optical Analysis Output"** tabbed console directly in the dashboard's center console. Below this console, a new panel of **live MCP actions** was added to interact with MongoDB:
+  * **🔍 Find Fixtures** — Directs the Gemini agent to query the `equipment_catalog` collection in the database via MCP and recommend suitable fixture models based on the scan description.
+  * **⚡ Calculate ROI** — Triggers the agent to fetch electricity rates from `energy_tariffs` and calculate estimated power draw reduction, financial savings, and the exact payback period (ROI).
+  * **💾 Save Audit** — Invokes the `insert_document` MCP tool to save the new spatial audit findings into the `audit_history` collection, returning the resulting MongoDB insertion ID.
 
