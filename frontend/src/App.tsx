@@ -56,8 +56,12 @@ const DimensionLine = ({ label, className = "" }: { label: string, className?: s
   </div>
 );
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8000';
+
 export default function App() {
   const [dragActive, setDragActive] = useState(false);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [chatMessages, setChatMessages] = useState<{role: 'user' | 'agent', text: string}[]>([
     { role: 'agent', text: 'SYSTEM INITIALIZED. AGENT CONNECTED TO MCP DATABASE. AWAITING QUERY...' }
   ]);
@@ -65,6 +69,7 @@ export default function App() {
   const [isTyping, setIsTyping] = useState(false);
   const [sessionId] = useState(() => Math.random().toString(36).substring(7));
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -80,7 +85,7 @@ export default function App() {
     setIsTyping(true);
 
     try {
-      const res = await fetch("https://spatial-optician-backend-601334765015.europe-west1.run.app/api/chat", {
+      const res = await fetch(`${BACKEND_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sessionId, message: userMsg })
@@ -97,6 +102,48 @@ export default function App() {
     }
   };
 
+  const processImageFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setChatMessages(prev => [...prev, { role: 'agent', text: 'ERROR: Unsupported file format. Please upload an image file (JPG, PNG, WEBP, etc.).' }]);
+      return;
+    }
+
+    // Show local preview immediately
+    const reader = new FileReader();
+    reader.onload = (ev) => setUploadedImage(ev.target?.result as string);
+    reader.readAsDataURL(file);
+
+    setIsAnalyzingImage(true);
+    setChatMessages(prev => [...prev, { role: 'user', text: `[IMAGE UPLOADED] ${file.name}` }]);
+    setChatMessages(prev => [...prev, { role: 'agent', text: 'OPTICAL SCAN RECEIVED. INITIALIZING GEMINI VISION ANALYSIS...' }]);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(`${BACKEND_URL}/api/analyze-image`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Vision analysis failed');
+      }
+      setChatMessages(prev => [...prev, { role: 'agent', text: data.description }]);
+    } catch (err: any) {
+      setChatMessages(prev => [...prev, { role: 'agent', text: `VISION ERROR: ${err.message}` }]);
+    } finally {
+      setIsAnalyzingImage(false);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processImageFile(file);
+    // Reset so same file can be re-uploaded
+    e.target.value = '';
+  };
+
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -105,6 +152,14 @@ export default function App() {
     } else if (e.type === "dragleave") {
       setDragActive(false);
     }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processImageFile(file);
   };
 
   return (
@@ -219,11 +274,25 @@ export default function App() {
             transition={{ delay: 0.3 }}
             className="h-full"
           >
-            <div 
-              onDragEnter={handleDrag} 
-              onDragLeave={handleDrag} 
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileSelect}
+              id="photo-upload-input"
+            />
+
+            <div
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
               onDragOver={handleDrag}
-              className={`h-full border-2 border-dashed border-white/40 bg-white/5 relative flex flex-col items-center justify-center p-12 transition-all duration-300 ${dragActive ? 'bg-white/10 scale-[1.01]' : ''}`}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`h-full border-2 border-dashed border-white/40 bg-white/5 relative flex flex-col items-center justify-center p-12 transition-all duration-300 cursor-pointer ${
+                dragActive ? 'bg-white/15 border-white/80 scale-[1.01]' : 'hover:bg-white/8 hover:border-white/60'
+              } ${isAnalyzingImage ? 'pointer-events-none' : ''}`}
             >
               {/* Corner brackets */}
               <div className="absolute top-8 left-8 w-12 h-12 border-t-2 border-l-2 border-white/60"></div>
@@ -231,39 +300,75 @@ export default function App() {
               <div className="absolute bottom-8 left-8 w-12 h-12 border-b-2 border-l-2 border-white/60"></div>
               <div className="absolute bottom-8 right-8 w-12 h-12 border-b-2 border-r-2 border-white/60"></div>
 
-              {/* Crosshair */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 pointer-events-none opacity-40">
-                <div className="absolute top-1/2 left-0 w-full h-px bg-white"></div>
-                <div className="absolute top-0 left-1/2 w-px h-full bg-white"></div>
-              </div>
+              {uploadedImage ? (
+                /* Image preview */
+                <div className="relative w-full h-full flex flex-col items-center justify-center gap-4">
+                  <div className="relative border border-white/30 shadow-lg overflow-hidden max-h-64 w-full">
+                    <img
+                      src={uploadedImage}
+                      alt="Uploaded scan"
+                      className="w-full h-full object-contain"
+                      style={{ maxHeight: '256px' }}
+                    />
+                    {isAnalyzingImage && (
+                      <div className="absolute inset-0 bg-[#0a2e5c]/70 flex flex-col items-center justify-center gap-3">
+                        <div className="flex gap-1">
+                          {[0,1,2,3,4].map(i => (
+                            <motion.div
+                              key={i}
+                              className="w-1 bg-white"
+                              animate={{ height: ['8px', '24px', '8px'] }}
+                              transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.12 }}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-[10px] uppercase tracking-widest opacity-80">Vision Analysis Running...</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] uppercase tracking-widest opacity-50">Click or drop to replace image</p>
+                  </div>
+                </div>
+              ) : (
+                /* Default upload prompt */
+                <>
+                  {/* Crosshair */}
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 pointer-events-none opacity-40">
+                    <div className="absolute top-1/2 left-0 w-full h-px bg-white"></div>
+                    <div className="absolute top-0 left-1/2 w-px h-full bg-white"></div>
+                  </div>
 
-              <div className="text-center group cursor-pointer">
-                <div className="mb-6 relative inline-block">
-                  <motion.div 
-                    whileHover={{ scale: 1.1, rotate: 5 }}
-                    className="p-8 border border-white bg-[#0a2e5c]"
-                  >
-                    <Upload className="w-12 h-12 text-white" />
-                  </motion.div>
-                  <div className="absolute -top-2 -right-2 w-4 h-4 bg-white"></div>
-                </div>
-                <h2 className="text-2xl uppercase tracking-tighter mb-2">Photo Upload Area</h2>
-                <p className="text-xs opacity-50 uppercase tracking-widest max-w-[200px] mx-auto leading-relaxed">
-                  Drop architectural scan or site photo for depth extraction
-                </p>
-                
-                <div className="mt-8 inline-flex items-center gap-2 text-xs border border-white/40 px-4 py-2 hover:bg-white hover:text-blue-900 transition-colors uppercase tracking-widest">
-                  Browse Files <ArrowRight size={14} />
-                </div>
-              </div>
+                  <div className="text-center group">
+                    <div className="mb-6 relative inline-block">
+                      <motion.div
+                        whileHover={{ scale: 1.1, rotate: 5 }}
+                        animate={dragActive ? { scale: 1.15, rotate: 5 } : { scale: 1, rotate: 0 }}
+                        className="p-8 border border-white bg-[#0a2e5c]"
+                      >
+                        <Upload className="w-12 h-12 text-white" />
+                      </motion.div>
+                      <div className="absolute -top-2 -right-2 w-4 h-4 bg-white"></div>
+                    </div>
+                    <h2 className="text-2xl uppercase tracking-tighter mb-2">Photo Upload Area</h2>
+                    <p className="text-xs opacity-50 uppercase tracking-widest max-w-[200px] mx-auto leading-relaxed">
+                      {dragActive ? 'Release to scan' : 'Drop architectural scan or site photo for depth extraction'}
+                    </p>
+
+                    <div className="mt-8 inline-flex items-center gap-2 text-xs border border-white/40 px-4 py-2 hover:bg-white hover:text-blue-900 transition-colors uppercase tracking-widest">
+                      Browse Files <ArrowRight size={14} />
+                    </div>
+                  </div>
+                </>
+              )}
 
               {/* Specs at bottom of upload area */}
               <div className="absolute bottom-4 left-4 right-4 flex justify-between text-[8px] uppercase tracking-widest opacity-40">
-                <span>BUFFER_STATUS: READY</span>
+                <span>BUFFER_STATUS: {isAnalyzingImage ? 'ANALYZING...' : uploadedImage ? 'SCAN_LOADED' : 'READY'}</span>
                 <span>ENC: RSA-4096 / AUTH_SYSTEM_V2</span>
               </div>
             </div>
-            
+
             <DimensionLine label="420mm x 297mm (A3 Standard)" className="mt-4" />
           </motion.div>
         </div>

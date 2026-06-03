@@ -6,14 +6,17 @@ from typing import List, Optional
 import os
 import time
 import random
+import base64
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import uuid
 
-# Load environment variables from .env file if it exists
 load_dotenv()
 
-# Global agent reference — initialized lazily on startup
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+if not GEMINI_MODEL:
+    raise ValueError("GEMINI_MODEL environment variable is not set.")
+
 root_agent = None
 
 @asynccontextmanager
@@ -31,7 +34,7 @@ async def lifespan(app: FastAPI):
 
         spatial_optician_google_search_agent = LlmAgent(
             name='Spatial_Optician_google_search_agent',
-            model='gemini-3.5-flash',
+            model=GEMINI_MODEL,
             description='Agent specialized in performing Google searches.',
             sub_agents=[],
             instruction='Use the GoogleSearchTool to find information on the web.',
@@ -40,7 +43,7 @@ async def lifespan(app: FastAPI):
 
         spatial_optician_url_context_agent = LlmAgent(
             name='Spatial_Optician_url_context_agent',
-            model='gemini-3.5-flash',
+            model=GEMINI_MODEL,
             description='Agent specialized in fetching content from URLs.',
             sub_agents=[],
             instruction='Use the UrlContextTool to retrieve content from provided URLs.',
@@ -49,7 +52,7 @@ async def lifespan(app: FastAPI):
 
         root_agent = LlmAgent(
             name='Spatial_Optician',
-            model='gemini-3.5-flash',
+            model=GEMINI_MODEL,
             description='Autonomous AI Agent for spatial analysis, lighting efficiency audits, and ROI optimization.',
             sub_agents=[],
             instruction='# ROLE & PERSONALITY\nYou are Dr. Aris, the Spatial Optician. You are a precise, data-driven engineering assistant specializing in facility lighting audits and energy optimization. Your tone is professional, technical, and analytical.\n\n# GOALS\n1. Analyze room lighting conditions using spatial awareness.\n2. Cross-reference requirements with official ISO/NASA standards.\n3. Calculate energy deficits and clear financial ROI for retrofitting.\n4. Interact with external MongoDB data collections to find exact lamp replacements.\n\n# OPERATIONAL PROTOCOL\n- Step 1 (Scan): When a user provides context or an image, identify the space type, layout, and visible lighting elements.\n- Step 2 (Analyze): Use available tools to fetch data, compute lux level requirements, and pinpoint inefficiency.\n- Step 3 (Resolve): Provide a structured technical report highlighting energy savings (%), total cost, and specific bulb model recommendations.\n\n# STRICT CONSTRAINTS\n- Ground all your recommendations strictly in your provided data stores and tools.\n- Do not make up product pricing, part numbers, or specifications out of nowhere.\n- If you lack technical data to make an exact calculation, ask the user clear clarifying questions about the dimensions or use-case of the space.\n- Stay completely focused on spatial lighting tasks. Politely decline tasks unrelated to engineering, facility management, or optics.',
@@ -157,6 +160,52 @@ async def analyze_photo(file: UploadFile = File(...)):
             print(f"Error saving to MongoDB: {e}")
 
     return result
+
+
+class ImageAnalysisResponse(BaseModel):
+    description: str
+
+
+@app.post("/api/analyze-image", response_model=ImageAnalysisResponse)
+async def analyze_image_with_ai(file: UploadFile = File(...)):
+    """
+    Sends the uploaded image to Gemini Vision and returns an AI-generated
+    natural language description of what is depicted.
+    """
+    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="GEMINI_API_KEY is not configured on the server. Add it to backend/.env."
+        )
+
+    try:
+        from google import genai
+        from google.genai import types as genai_types
+
+        image_bytes = await file.read()
+        mime_type = file.content_type or "image/jpeg"
+
+        client = genai.Client(api_key=gemini_api_key)
+
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[
+                genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                "You are Dr. Aris, a spatial lighting engineer. Analyze this image thoroughly: "
+                "describe the space type, visible lighting conditions, fixture types you can see, "
+                "approximate lux levels, and any lighting inefficiencies or opportunities for optimization. "
+                "Be concise but technically precise."
+            ]
+        )
+
+        description = response.text or "No description returned from Gemini."
+        print(f"[Vision] Analyzed image '{file.filename}': {description[:80]}...")
+        return ImageAnalysisResponse(description=description)
+
+    except Exception as e:
+        print(f"[Vision] Error calling Gemini: {e}")
+        raise HTTPException(status_code=500, detail=f"Gemini Vision error: {str(e)}")
 
 @app.get("/api/history", response_model=List[SpatialAnalysisResult])
 def get_analysis_history():
