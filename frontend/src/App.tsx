@@ -72,50 +72,85 @@ const parseBoldText = (text: string) => {
 
 const formatReportText = (text: string) => {
   if (!text) return null;
-  const lines = text.split('\n');
+  
+  // Split by newlines, handling both \r\n and \n
+  const lines = text.split(/\r?\n/);
+  
   return lines.map((line, index) => {
     const trimmed = line.trim();
     
-    // Header 3
-    if (trimmed.startsWith('###')) {
-      const content = parseBoldText(trimmed.replace(/^###\s*/, ''));
-      return <h4 key={index} className="text-sm font-bold uppercase tracking-wider text-white mt-4 mb-2 border-b border-white/20 pb-0.5">{content}</h4>;
-    }
-    // Header 2
-    if (trimmed.startsWith('##')) {
-      const content = parseBoldText(trimmed.replace(/^##\s*/, ''));
-      return <h3 key={index} className="text-base font-bold uppercase tracking-widest text-white mt-5 mb-2 border-b border-white/40 pb-1">{content}</h3>;
-    }
-    // Header 1
-    if (trimmed.startsWith('#')) {
-      const content = parseBoldText(trimmed.replace(/^#\s*/, ''));
-      return <h2 key={index} className="text-lg font-extrabold uppercase tracking-widest text-white mt-6 mb-3 border-b-2 border-white pb-1">{content}</h2>;
+    // Skip empty lines, but render spacing
+    if (trimmed === '') {
+      return <div key={index} className="h-3" />;
     }
     
-    // Bullet list item
-    if (trimmed.startsWith('*') || trimmed.startsWith('-')) {
-      const content = parseBoldText(trimmed.replace(/^[*-\s]+/, ''));
+    // 1. Check for horizontal rules
+    if (/^([-*_])\1{2,}$/.test(trimmed)) {
+      return <hr key={index} className="border-t border-white/20 my-4" />;
+    }
+
+    // 2. Check for Headers
+    const headerMatch = trimmed.match(/^(#{1,4})\s+(.*)$/);
+    if (headerMatch) {
+      const level = headerMatch[1].length;
+      const titleText = headerMatch[2];
+      const content = parseBoldText(titleText);
+      
+      if (level === 1) {
+        return (
+          <h2 key={index} className="text-sm font-bold uppercase tracking-[0.2em] text-white mt-6 mb-3 border-b border-white/30 pb-1.5 flex items-center gap-2 font-mono">
+            <span className="w-1.5 h-3 bg-white shrink-0"></span>
+            {content}
+          </h2>
+        );
+      } else if (level === 2) {
+        return (
+          <h3 key={index} className="text-xs font-bold uppercase tracking-[0.15em] text-white/90 mt-5 mb-2 border-b border-white/15 pb-1 flex items-center gap-1.5 font-mono">
+            <span className="w-1 h-2.5 bg-white/60 shrink-0"></span>
+            {content}
+          </h3>
+        );
+      } else {
+        return (
+          <h4 key={index} className="text-[11px] font-bold uppercase tracking-wider text-white/80 mt-4 mb-2 font-mono">
+            {content}
+          </h4>
+        );
+      }
+    }
+
+    // 3. Check for Bullet List Items
+    const listMatch = trimmed.match(/^([*\-•+])\s+(.*)$/);
+    if (listMatch) {
+      const bulletContent = listMatch[2];
+      // Skip empty bullet items
+      if (bulletContent.trim() === '' || bulletContent.trim() === '---' || bulletContent.trim() === '--') {
+        return null;
+      }
+      const content = parseBoldText(bulletContent);
       return (
-        <div key={index} className="flex gap-2 items-start ml-4 my-1">
-          <span className="text-white opacity-80 mt-1 shrink-0">▪</span>
-          <span className="text-xs tracking-wide text-white/90 leading-relaxed">{content}</span>
+        <div key={index} className="flex gap-2 items-start ml-4 my-1.5">
+          <span className="text-white/60 mt-1.5 shrink-0 text-[8px]">▪</span>
+          <span className="text-xs tracking-wide text-white/80 leading-relaxed font-sans">{content}</span>
         </div>
       );
     }
 
-    // Paragraph / normal line
-    if (trimmed === '') {
-      return <div key={index} className="h-2" />;
-    }
-
-    const content = parseBoldText(line);
-    return <p key={index} className="text-xs tracking-wide text-white/90 leading-relaxed my-1.5">{content}</p>;
+    // 4. Regular Paragraph
+    const content = parseBoldText(trimmed);
+    return (
+      <p key={index} className="text-xs tracking-wide text-white/80 leading-relaxed my-1.5 font-sans">
+        {content}
+      </p>
+    );
   });
 };
 
 export default function App() {
   const [dragActive, setDragActive] = useState(false);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [imageResolution, setImageResolution] = useState<{ width: number; height: number } | null>(null);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -130,6 +165,16 @@ export default function App() {
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsZoomed(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // MCP Integration States
   const [activeTab, setActiveTab] = useState<'report' | 'catalog' | 'roi'>('report');
@@ -167,7 +212,15 @@ export default function App() {
 
     // Show local preview immediately
     const reader = new FileReader();
-    reader.onload = (ev) => setUploadedImage(ev.target?.result as string);
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      setUploadedImage(dataUrl);
+      const img = new Image();
+      img.onload = () => {
+        setImageResolution({ width: img.naturalWidth, height: img.naturalHeight });
+      };
+      img.src = dataUrl;
+    };
     reader.readAsDataURL(file);
 
     setIsAnalyzingImage(true);
@@ -347,6 +400,7 @@ export default function App() {
     const confirmed = window.confirm("Are you sure you want to delete the uploaded image and clear all analysis data?");
     if (confirmed) {
       setUploadedImage(null);
+      setImageResolution(null);
       setAnalysisResult(null);
       setAnalysisError(null);
       setCatalogResult(null);
@@ -491,7 +545,7 @@ export default function App() {
             id="photo-upload-input"
           />
 
-          <div className="h-[280px] shrink-0">
+          <div className={`transition-all duration-500 shrink-0 ${uploadedImage ? 'h-[480px]' : 'h-[280px]'}`}>
             <div
               onDragEnter={handleDrag}
               onDragLeave={handleDrag}
@@ -511,20 +565,40 @@ export default function App() {
               {uploadedImage ? (
                 /* Image preview */
                 <div className="relative w-full h-full flex flex-col items-center justify-center gap-2">
-                  <div className="relative border border-white/30 shadow-lg overflow-hidden h-full max-h-[230px] w-full flex items-center justify-center bg-black/10">
+                  <div className="relative border border-white/30 shadow-lg overflow-hidden h-full max-h-[430px] w-full flex items-center justify-center bg-black/10">
                     <img
                       src={uploadedImage}
                       alt="Uploaded scan"
-                      className="max-h-full max-w-full object-contain"
+                      className="max-h-full max-w-full object-contain cursor-zoom-in hover:scale-[1.01] transition-transform duration-300"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsZoomed(true);
+                      }}
                     />
                     {!isAnalyzingImage && (
-                      <button
-                        onClick={handleClearAll}
-                        className="absolute top-2 right-2 px-2 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-xs tracking-widest font-mono font-bold z-10"
-                        title="Delete Scan & Clear All"
-                      >
-                        ✕ Delete Scan
-                      </button>
+                      <>
+                        <div className="absolute top-2 left-2 flex gap-2 z-10">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsZoomed(true);
+                            }}
+                            className="px-2.5 py-1 bg-[#0a2e5c]/95 border border-white/40 hover:bg-white/20 hover:border-white text-white transition-colors uppercase text-xs tracking-widest font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+                            title="Zoom / View Fullscreen"
+                          >
+                            <Maximize size={12} /> Full Size
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleClearAll}
+                          className="absolute top-2 right-2 px-2 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-xs tracking-widest font-mono font-bold z-10 cursor-pointer"
+                          title="Delete Scan & Clear All"
+                        >
+                          ✕ Delete Scan
+                        </button>
+                      </>
                     )}
                     {isAnalyzingImage && (
                       <div className="absolute inset-0 bg-[#0a2e5c]/70 flex flex-col items-center justify-center gap-3 pointer-events-auto">
@@ -573,26 +647,35 @@ export default function App() {
                       <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white"></div>
                     </div>
                     <h2 className="text-lg uppercase tracking-tighter mb-1">Photo Upload Area</h2>
-                    <p className="text-xs opacity-50 uppercase tracking-widest max-w-[220px] mx-auto leading-normal">
+                    {/* <p className="text-xs opacity-50 uppercase tracking-widest max-w-[220px] mx-auto leading-normal">
                       {dragActive ? 'Release to scan' : 'Drop architectural scan or site photo for depth extraction'}
-                    </p>
+                    </p> */}
                   </div>
                 </>
               )}
 
               {/* Specs at bottom of upload area */}
-              <div className="absolute bottom-2 left-4 right-4 flex justify-between text-xs uppercase tracking-widest opacity-40">
+              {/* <div className="absolute bottom-2 left-4 right-4 flex justify-between text-xs uppercase tracking-widest opacity-40">
                 <span>BUFFER_STATUS: {isAnalyzingImage ? 'ANALYZING...' : uploadedImage ? 'SCAN_LOADED' : 'READY'}</span>
-                {/* <span>ENC: RSA-4096 / AUTH_SYSTEM_V2</span> */}
+                <span>ENC: RSA-4096 / AUTH_SYSTEM_V2</span>
+              </div> */}
+              <div className="absolute bottom-2 left-4 right-4 flex justify-center text-xs uppercase tracking-widest opacity-40">
+                <span>Drop architectural scan or site photo for depth extraction</span>
               </div>
             </div>
           </div>
 
-          <DimensionLine label="420mm x 297mm (A3 Standard)" className="my-1" />
+          <DimensionLine
+            label={
+              uploadedImage
+                ? (imageResolution ? `${imageResolution.width}px x ${imageResolution.height}px (Source Scan)` : "Resolving metrics...")
+                : "Flexible Workspace (Any Photo / Layout Plan / Scan)"
+            }
+            className="my-1"
+          />
 
-          {/* Analysis Report Section */}
           <div className="flex-1 min-h-[300px] flex flex-col">
-            <BlueprintBox title="Optical Analysis Output" className="flex-1 flex flex-col relative overflow-hidden bg-white/5 p-4">
+            <BlueprintBox title="Optical Analysis Output" className="flex-1 flex flex-col relative bg-white/5 p-4">
               
               {/* Tab Selector */}
               {analysisResult && (
@@ -710,12 +793,12 @@ export default function App() {
                 ) : (
                   /* Render corresponding tab data */
                   <div className="text-left font-mono py-1">
-                    <div className="flex justify-between items-center text-xs opacity-40 border-b border-white/20 pb-2 mb-4 uppercase tracking-widest">
+                    {/* <div className="flex justify-between items-center text-xs opacity-40 border-b border-white/20 pb-2 mb-4 uppercase tracking-widest">
                       <span>REPORT_STATUS: VERIFIED</span>
                       <span>
                         TAB: {activeTab === 'report' ? 'DIAGNOSTIC' : activeTab === 'catalog' ? 'EQUIPMENT_CATALOG' : 'ROI_METRICS'}
                       </span>
-                    </div>
+                    </div> */}
                     <div className="space-y-3">
                       {activeTab === 'report' && formatReportText(analysisResult)}
                       {activeTab === 'catalog' && formatReportText(catalogResult)}
@@ -915,6 +998,47 @@ export default function App() {
           <Eye size={12} /> AI responses may contain inaccuracies, please double-check the information
         </div>
       </footer>
+
+      {/* Full Size Zoom Overlay Modal */}
+      {isZoomed && uploadedImage && (
+        <div 
+          className="fixed inset-0 z-50 bg-[#020d1c]/95 flex flex-col items-center justify-center p-6 cursor-zoom-out"
+          onClick={() => setIsZoomed(false)}
+        >
+          {/* Subtle blueprint background grid on full-screen preview */}
+          <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,255,255,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none"></div>
+          
+          <div className="absolute top-6 right-6 flex gap-3 z-50">
+            <button
+              onClick={() => setIsZoomed(false)}
+              className="px-4 py-2 bg-[#0a2e5c] border border-white/40 hover:bg-white/10 hover:border-white text-white transition-colors uppercase text-xs tracking-widest font-mono font-bold cursor-pointer"
+            >
+              ✕ Close Preview
+            </button>
+          </div>
+          
+          <div 
+            className="relative max-w-full max-h-full border-2 border-white/60 p-1 bg-[#0a2e5c]/40 shadow-2xl flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Blueprint corner marks */}
+            <div className="absolute -top-1.5 -left-1.5 w-4 h-4 border-t-2 border-l-2 border-white"></div>
+            <div className="absolute -top-1.5 -right-1.5 w-4 h-4 border-t-2 border-r-2 border-white"></div>
+            <div className="absolute -bottom-1.5 -left-1.5 w-4 h-4 border-b-2 border-l-2 border-white"></div>
+            <div className="absolute -bottom-1.5 -right-1.5 w-4 h-4 border-b-2 border-r-2 border-white"></div>
+
+            <img 
+              src={uploadedImage} 
+              alt="Full resolution site scan" 
+              className="max-h-[85vh] max-w-[90vw] object-contain block"
+            />
+            
+            <div className="absolute -top-3.5 left-6 bg-[#0a2e5c] px-3 py-0.5 text-xs uppercase tracking-widest border border-white/40 font-mono text-white">
+              Full Resolution Scan
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
