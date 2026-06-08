@@ -186,7 +186,9 @@ export default function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to query catalog");
-      
+      if (!data.message || data.message === "No response from agent.") {
+        throw new Error("Agent returned no results. The MCP database connection may be unavailable.");
+      }
       setCatalogResult(data.message);
     } catch (err: any) {
       setAnalysisError(`CATALOG ERROR: ${err.message || 'FAILED TO QUERY MCP DATABASE'}`);
@@ -213,7 +215,9 @@ export default function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to calculate ROI");
-      
+      if (!data.message || data.message === "No response from agent.") {
+        throw new Error("Agent returned no results. The MCP database connection may be unavailable.");
+      }
       setRoiResult(data.message);
     } catch (err: any) {
       setAnalysisError(`ROI ERROR: ${err.message || 'FAILED TO CALCULATE ENERGY SAVINGS'}`);
