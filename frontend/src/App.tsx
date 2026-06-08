@@ -264,6 +264,20 @@ export default function App() {
     e.target.value = '';
   };
 
+  const handleClearAll = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const confirmed = window.confirm("Are you sure you want to delete the uploaded image and clear all analysis data?");
+    if (confirmed) {
+      setUploadedImage(null);
+      setAnalysisResult(null);
+      setAnalysisError(null);
+      setCatalogResult(null);
+      setRoiResult(null);
+      setAuditSaveStatus(null);
+      setActiveTab('report');
+    }
+  };
+
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -424,6 +438,15 @@ export default function App() {
                       alt="Uploaded scan"
                       className="max-h-full max-w-full object-contain"
                     />
+                    {!isAnalyzingImage && (
+                      <button
+                        onClick={handleClearAll}
+                        className="absolute top-2 right-2 px-2 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-[9px] tracking-widest font-mono font-bold z-10"
+                        title="Delete Scan & Clear All"
+                      >
+                        ✕ Delete Scan
+                      </button>
+                    )}
                     {isAnalyzingImage && (
                       <div className="absolute inset-0 bg-[#0a2e5c]/70 flex flex-col items-center justify-center gap-3">
                         <div className="flex gap-1">
