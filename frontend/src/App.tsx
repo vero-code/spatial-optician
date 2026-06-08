@@ -116,6 +116,7 @@ export default function App() {
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // MCP Integration States
   const [activeTab, setActiveTab] = useState<'report' | 'catalog' | 'roi'>('report');
@@ -126,6 +127,23 @@ export default function App() {
   const [isCalculatingRoi, setIsCalculatingRoi] = useState(false);
   const [isSavingAudit, setIsSavingAudit] = useState(false);
   const [auditSaveStatus, setAuditSaveStatus] = useState<{success: boolean, text: string} | null>(null);
+
+  const startNewRequest = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    return controller.signal;
+  };
+
+  const handleCancelRequest = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  };
 
   const processImageFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -149,6 +167,8 @@ export default function App() {
     setRoiResult(null);
     setAuditSaveStatus(null);
 
+    const signal = startNewRequest();
+
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -156,6 +176,7 @@ export default function App() {
       const res = await fetch(`${BACKEND_URL}/api/analyze-image`, {
         method: 'POST',
         body: formData,
+        signal,
       });
       const data = await res.json();
       if (!res.ok) {
@@ -163,7 +184,11 @@ export default function App() {
       }
       setAnalysisResult(data.description);
     } catch (err: any) {
-      setAnalysisError(`VISION ERROR: ${err.message || 'FAILED TO CONNECT TO ANALYSIS AGENT'}`);
+      if (err.name === 'AbortError') {
+        setAnalysisError('VISION ANALYSIS CANCELLED BY USER.');
+      } else {
+        setAnalysisError(`VISION ERROR: ${err.message || 'FAILED TO CONNECT TO ANALYSIS AGENT'}`);
+      }
     } finally {
       setIsAnalyzingImage(false);
     }
@@ -175,10 +200,12 @@ export default function App() {
     setAnalysisError(null);
     setCatalogResult(null);
     setActiveTab('catalog');
+    const signal = startNewRequest();
     try {
       const res = await fetch(`${BACKEND_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal,
         body: JSON.stringify({
           session_id: "catalog-query",
           message: `Based on the following audit description: "${analysisResult}", use the MCP tools (such as query_documents or get_schema) to search the 'equipment_catalog' collection in the database. Find fixtures that are suitable for this facility type. Report back the recommended models, listing their brand, power, luminous flux, and unit cost. Format the output with clear headers and bullet points.`
@@ -191,7 +218,11 @@ export default function App() {
       }
       setCatalogResult(data.message);
     } catch (err: any) {
-      setAnalysisError(`CATALOG ERROR: ${err.message || 'FAILED TO QUERY MCP DATABASE'}`);
+      if (err.name === 'AbortError') {
+        setAnalysisError('CATALOG QUERY CANCELLED BY USER.');
+      } else {
+        setAnalysisError(`CATALOG ERROR: ${err.message || 'FAILED TO QUERY MCP DATABASE'}`);
+      }
       setActiveTab('report');
     } finally {
       setIsQueryingCatalog(false);
@@ -204,10 +235,12 @@ export default function App() {
     setAnalysisError(null);
     setRoiResult(null);
     setActiveTab('roi');
+    const signal = startNewRequest();
     try {
       const res = await fetch(`${BACKEND_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal,
         body: JSON.stringify({
           session_id: "roi-query",
           message: `Based on this audit description: "${analysisResult}", calculate the financial ROI and energy savings for upgrading the current lighting to the recommended LED fixtures in our catalog. Query the 'energy_tariffs' collection in the database via MCP to find the electricity rates for NY (since the site is NY-HUD-01). Perform the calculations: current power draw vs proposed, annual cost savings, and payback period. Show your work, including database query results.`
@@ -220,7 +253,11 @@ export default function App() {
       }
       setRoiResult(data.message);
     } catch (err: any) {
-      setAnalysisError(`ROI ERROR: ${err.message || 'FAILED TO CALCULATE ENERGY SAVINGS'}`);
+      if (err.name === 'AbortError') {
+        setAnalysisError('ROI CALCULATION CANCELLED BY USER.');
+      } else {
+        setAnalysisError(`ROI ERROR: ${err.message || 'FAILED TO CALCULATE ENERGY SAVINGS'}`);
+      }
       setActiveTab('report');
     } finally {
       setIsCalculatingRoi(false);
@@ -232,10 +269,12 @@ export default function App() {
     setIsSavingAudit(true);
     setAuditSaveStatus(null);
     setAnalysisError(null);
+    const signal = startNewRequest();
     try {
       const res = await fetch(`${BACKEND_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal,
         body: JSON.stringify({
           session_id: "save-audit",
           message: `Please record this audit findings into the 'audit_history' collection in MongoDB using the insert_document MCP tool. The site reference is 'NY-HUD-01', total area is 2500 sqm, status is 'Needs Upgrade'. Use the analyzed information from this text: "${analysisResult}". Output the confirmation with the exact insertedId returned by the database.`
@@ -249,10 +288,17 @@ export default function App() {
         text: `AUDIT SAVED SUCCESSFUL. ${data.message}`
       });
     } catch (err: any) {
-      setAuditSaveStatus({
-        success: false,
-        text: `Error saving: ${err.message}`
-      });
+      if (err.name === 'AbortError') {
+        setAuditSaveStatus({
+          success: false,
+          text: 'SAVE AUDIT CANCELLED BY USER.'
+        });
+      } else {
+        setAuditSaveStatus({
+          success: false,
+          text: `Error saving: ${err.message}`
+        });
+      }
     } finally {
       setIsSavingAudit(false);
     }
@@ -448,7 +494,7 @@ export default function App() {
                       </button>
                     )}
                     {isAnalyzingImage && (
-                      <div className="absolute inset-0 bg-[#0a2e5c]/70 flex flex-col items-center justify-center gap-3">
+                      <div className="absolute inset-0 bg-[#0a2e5c]/70 flex flex-col items-center justify-center gap-3 pointer-events-auto">
                         <div className="flex gap-1">
                           {[0,1,2,3,4].map(i => (
                             <motion.div
@@ -460,6 +506,12 @@ export default function App() {
                           ))}
                         </div>
                         <span className="text-[10px] uppercase tracking-widest opacity-80">Vision Analysis Running...</span>
+                        <button
+                          onClick={handleCancelRequest}
+                          className="mt-2 px-3 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-[9px] tracking-widest font-mono font-bold pointer-events-auto z-20"
+                        >
+                          ✕ Stop Analysis
+                        </button>
                       </div>
                     )}
                   </div>
@@ -561,6 +613,12 @@ export default function App() {
                     <p className="text-[9px] uppercase tracking-widest font-mono opacity-50 mt-1">
                       Searching equipment_catalog collection for matching models
                     </p>
+                    <button
+                      onClick={handleCancelRequest}
+                      className="mt-4 px-3 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-[9px] tracking-widest font-mono font-bold z-10"
+                    >
+                      ✕ Stop Analysis
+                    </button>
                   </div>
                 ) : activeTab === 'roi' && isCalculatingRoi ? (
                   <div className="h-full flex flex-col items-center justify-center py-12 text-center">
@@ -580,6 +638,12 @@ export default function App() {
                     <p className="text-[9px] uppercase tracking-widest font-mono opacity-50 mt-1">
                       Running energy savings calculations with NY-HUD database parameters
                     </p>
+                    <button
+                      onClick={handleCancelRequest}
+                      className="mt-4 px-3 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-[9px] tracking-widest font-mono font-bold z-10"
+                    >
+                      ✕ Stop Analysis
+                    </button>
                   </div>
                 ) : isAnalyzingImage ? (
                   <div className="h-full flex flex-col items-center justify-center py-12 text-center">
@@ -599,6 +663,12 @@ export default function App() {
                     <p className="text-[9px] uppercase tracking-widest font-mono opacity-50 mt-1">
                       Extracting spatial geometry & illuminance profiles
                     </p>
+                    <button
+                      onClick={handleCancelRequest}
+                      className="mt-4 px-3 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-[9px] tracking-widest font-mono font-bold z-10"
+                    >
+                      ✕ Stop Analysis
+                    </button>
                   </div>
                 ) : analysisError ? (
                   <div className="text-red-400 font-mono text-[11px] p-3 border border-red-500/30 bg-red-950/20 uppercase tracking-wide">
