@@ -29,7 +29,11 @@ const BlueprintBox = ({ title, children, className = "" }: { title?: string, chi
   </div>
 );
 
-const SpecField = ({ label, value, unit, description }: { label: string, value: string | number, unit?: string, description?: string }) => (
+const Skeleton = ({ className = "" }: { className?: string, key?: React.Key }) => (
+  <span className={`animate-pulse bg-white/10 inline-block rounded-sm ${className}`} style={{ minHeight: '1em' }} />
+);
+
+const SpecField = ({ label, value, unit, description }: { label: string, value: React.ReactNode, unit?: string, description?: string }) => (
   <div className="mb-4 relative">
     <div className="flex justify-between items-baseline mb-1 border-b border-dashed border-white/30 pb-1">
       <span className="text-xs uppercase opacity-70 tracking-tighter">{label}</span>
@@ -38,7 +42,7 @@ const SpecField = ({ label, value, unit, description }: { label: string, value: 
         {unit && <span className="text-xs ml-0.5 opacity-60 uppercase">{unit}</span>}
       </span>
     </div>
-    {description && <div className="text-[10px] opacity-50 italic text-right leading-tight">{description}</div>}
+    {description && <div className="text-xs opacity-50 italic text-right leading-tight">{description}</div>}
   </div>
 );
 
@@ -47,7 +51,7 @@ const DimensionLine = ({ label, className = "" }: { label: string, className?: s
     <div className="h-px bg-white/40 flex-1 relative">
       <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rotate-45"></div>
     </div>
-    <span className="text-[10px] uppercase whitespace-nowrap opacity-80">{label}</span>
+    <span className="text-xs uppercase whitespace-nowrap opacity-80">{label}</span>
     <div className="h-px bg-white/40 flex-1 relative">
       <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rotate-45"></div>
     </div>
@@ -115,6 +119,15 @@ export default function App() {
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [spatialData, setSpatialData] = useState<{
+    site_reference: string;
+    calibration_date: string;
+    optical_scale: string;
+    diffusion_coefficient: number;
+    rayleigh_scattering: string;
+    lux_deficit: number;
+    spatial_efficiency: number;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -160,6 +173,7 @@ export default function App() {
     setIsAnalyzingImage(true);
     setAnalysisError(null);
     setAnalysisResult(null);
+    setSpatialData(null);
 
     // Reset MCP States for new scan
     setActiveTab('report');
@@ -173,16 +187,34 @@ export default function App() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await fetch(`${BACKEND_URL}/api/analyze-image`, {
-        method: 'POST',
-        body: formData,
-        signal,
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.detail || 'Vision analysis failed');
+      // Call both endpoints in parallel
+      const [resVision, resSpatial] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/analyze-image`, {
+          method: 'POST',
+          body: formData,
+          signal,
+        }),
+        fetch(`${BACKEND_URL}/api/analyze`, {
+          method: 'POST',
+          body: formData,
+          signal,
+        })
+      ]);
+
+      if (!resVision.ok) {
+        const errData = await resVision.json();
+        throw new Error(errData.detail || 'Vision analysis failed');
       }
-      setAnalysisResult(data.description);
+      if (!resSpatial.ok) {
+        const errData = await resSpatial.json();
+        throw new Error(errData.detail || 'Spatial metrics extraction failed');
+      }
+
+      const visionData = await resVision.json();
+      const spatialDataResult = await resSpatial.json();
+
+      setAnalysisResult(visionData.description);
+      setSpatialData(spatialDataResult);
     } catch (err: any) {
       if (err.name === 'AbortError') {
         setAnalysisError('VISION ANALYSIS CANCELLED BY USER.');
@@ -320,6 +352,7 @@ export default function App() {
       setCatalogResult(null);
       setRoiResult(null);
       setAuditSaveStatus(null);
+      setSpatialData(null);
       setActiveTab('report');
     }
   };
@@ -358,7 +391,7 @@ export default function App() {
                 Spatial Optician
               </h1>
               <p className="text-sm opacity-60 uppercase tracking-[0.2em]">
-                V.2.04 / Architectural Visual Analysis
+                Architectural Visual Analysis
               </p>
             </div>
           </motion.div>
@@ -372,17 +405,17 @@ export default function App() {
              <svg className="w-4 h-4 text-emerald-400 shrink-0" viewBox="0 0 32 32" fill="currentColor">
                <path d="M16 2C16 2 9 8 9 16C9 23 14 28 16 30C18 28 23 23 23 16C23 8 16 2 16 2ZM16 26C16 26 13.5 22.5 13.5 16C13.5 10.5 16 7 16 7C16 7 18.5 10.5 18.5 16C18.5 22.5 16 26 16 26Z"/>
              </svg>
-             <div className="text-[10px] uppercase tracking-widest text-emerald-300 font-mono leading-none">
+             <div className="text-xs uppercase tracking-widest text-emerald-300 font-mono leading-none">
                Supported by <span className="font-bold text-white whitespace-nowrap">MongoDB for Startups</span>
              </div>
            </BlueprintBox>
 
-           <BlueprintBox className="p-3 bg-white/5 border-dashed">
+           {/* <BlueprintBox className="p-3 bg-white/5 border-dashed">
              <div className="flex gap-4 text-xs uppercase tracking-widest opacity-80">
                <div className="flex items-center gap-1"><Compass size={14} /> 40.7128°N</div>
                <div className="flex items-center gap-1"><Maximize size={14} /> 74.0060°W</div>
              </div>
-           </BlueprintBox>
+           </BlueprintBox> */}
         </div>
       </header>
 
@@ -399,26 +432,26 @@ export default function App() {
             <BlueprintBox title="Technical Specification" className="h-full">
               <SpecField 
                 label="Site Reference" 
-                value="NY-HUD-01" 
+                value={spatialData ? spatialData.site_reference : <Skeleton className="w-24 h-5" />} 
                 description="Project baseline grid identification"
               />
               <SpecField 
                 label="Calibration Date" 
-                value="25.05.2026" 
+                value={spatialData ? spatialData.calibration_date : <Skeleton className="w-24 h-5" />} 
                 description="Last astronomical alignment check"
               />
               <SpecField 
                 label="Optical Scale" 
-                value="1:500" 
-                unit="mm"
+                value={spatialData ? spatialData.optical_scale : <Skeleton className="w-20 h-5" />} 
+                unit={spatialData ? 'mm' : undefined}
                 description="Calculated based on detected depth buffer"
               />
               
               <div className="mt-8 pt-8 border-t border-white/20">
                 <h3 className="text-xs uppercase tracking-[0.3em] mb-4 opacity-50">Project Metadata</h3>
-                <div className="grid grid-cols-2 gap-4 text-[10px] uppercase opacity-70">
-                  <div className="border border-white/20 p-2">Drawn By: AGENT_SYSTEM</div>
-                  <div className="border border-white/20 p-2">Check By: AI_CORE_01</div>
+                <div className="grid grid-cols-2 gap-4 text-xs uppercase opacity-70">
+                  <div className="border border-white/20 p-2">Drawn By: SPATIAL OPTICIAN</div>
+                  <div className="border border-white/20 p-2">Check By: DR. ARIS (AI)</div>
                 </div>
               </div>
             </BlueprintBox>
@@ -434,12 +467,12 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <span className="text-xs uppercase">Diffusion Coefficient</span>
                   <div className="flex-1 mx-4 h-px border-b border-dotted border-white/40"></div>
-                  <span className="text-sm">0.842</span>
+                  <span className="text-sm">{spatialData ? spatialData.diffusion_coefficient.toFixed(3) : <Skeleton className="w-16 h-4" />}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs uppercase">Rayleigh Scattering</span>
                   <div className="flex-1 mx-4 h-px border-b border-dotted border-white/40"></div>
-                  <span className="text-sm">λ-4 η</span>
+                  <span className="text-sm">{spatialData ? spatialData.rayleigh_scattering : <Skeleton className="w-20 h-4" />}</span>
                 </div>
               </div>
             </BlueprintBox>
@@ -487,7 +520,7 @@ export default function App() {
                     {!isAnalyzingImage && (
                       <button
                         onClick={handleClearAll}
-                        className="absolute top-2 right-2 px-2 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-[9px] tracking-widest font-mono font-bold z-10"
+                        className="absolute top-2 right-2 px-2 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-xs tracking-widest font-mono font-bold z-10"
                         title="Delete Scan & Clear All"
                       >
                         ✕ Delete Scan
@@ -505,10 +538,10 @@ export default function App() {
                             />
                           ))}
                         </div>
-                        <span className="text-[10px] uppercase tracking-widest opacity-80">Vision Analysis Running...</span>
+                        <span className="text-xs uppercase tracking-widest opacity-80">Vision Analysis Running...</span>
                         <button
                           onClick={handleCancelRequest}
-                          className="mt-2 px-3 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-[9px] tracking-widest font-mono font-bold pointer-events-auto z-20"
+                          className="mt-2 px-3 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-xs tracking-widest font-mono font-bold pointer-events-auto z-20"
                         >
                           ✕ Stop Analysis
                         </button>
@@ -516,7 +549,7 @@ export default function App() {
                     )}
                   </div>
                   <div className="text-center shrink-0">
-                    <p className="text-[9px] uppercase tracking-widest opacity-50">Click or drop to replace image</p>
+                    <p className="text-xs uppercase tracking-widest opacity-50">Click or drop to replace image</p>
                   </div>
                 </div>
               ) : (
@@ -540,7 +573,7 @@ export default function App() {
                       <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white"></div>
                     </div>
                     <h2 className="text-lg uppercase tracking-tighter mb-1">Photo Upload Area</h2>
-                    <p className="text-[10px] opacity-50 uppercase tracking-widest max-w-[220px] mx-auto leading-normal">
+                    <p className="text-xs opacity-50 uppercase tracking-widest max-w-[220px] mx-auto leading-normal">
                       {dragActive ? 'Release to scan' : 'Drop architectural scan or site photo for depth extraction'}
                     </p>
                   </div>
@@ -548,7 +581,7 @@ export default function App() {
               )}
 
               {/* Specs at bottom of upload area */}
-              <div className="absolute bottom-2 left-4 right-4 flex justify-between text-[7px] uppercase tracking-widest opacity-40">
+              <div className="absolute bottom-2 left-4 right-4 flex justify-between text-xs uppercase tracking-widest opacity-40">
                 <span>BUFFER_STATUS: {isAnalyzingImage ? 'ANALYZING...' : uploadedImage ? 'SCAN_LOADED' : 'READY'}</span>
                 <span>ENC: RSA-4096 / AUTH_SYSTEM_V2</span>
               </div>
@@ -563,7 +596,7 @@ export default function App() {
               
               {/* Tab Selector */}
               {analysisResult && (
-                <div className="flex border-b border-white/20 mb-4 text-[9px] uppercase tracking-wider font-mono select-none">
+                <div className="flex border-b border-white/20 mb-4 text-xs uppercase tracking-wider font-mono select-none">
                   <button
                     onClick={() => setActiveTab('report')}
                     className={`px-3 py-1.5 border-r border-white/20 transition-all ${
@@ -610,12 +643,12 @@ export default function App() {
                     <p className="text-xs uppercase tracking-widest font-mono opacity-80 animate-pulse">
                       QUERYING DATABASE CATALOG VIA MCP...
                     </p>
-                    <p className="text-[9px] uppercase tracking-widest font-mono opacity-50 mt-1">
+                    <p className="text-xs uppercase tracking-widest font-mono opacity-50 mt-1">
                       Searching equipment_catalog collection for matching models
                     </p>
                     <button
                       onClick={handleCancelRequest}
-                      className="mt-4 px-3 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-[9px] tracking-widest font-mono font-bold z-10"
+                      className="mt-4 px-3 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-xs tracking-widest font-mono font-bold z-10"
                     >
                       ✕ Stop Analysis
                     </button>
@@ -635,12 +668,12 @@ export default function App() {
                     <p className="text-xs uppercase tracking-widest font-mono opacity-80 animate-pulse">
                       RETRIEVING TARIFFS & CALCULATING ROI...
                     </p>
-                    <p className="text-[9px] uppercase tracking-widest font-mono opacity-50 mt-1">
+                    <p className="text-xs uppercase tracking-widest font-mono opacity-50 mt-1">
                       Running energy savings calculations with NY-HUD database parameters
                     </p>
                     <button
                       onClick={handleCancelRequest}
-                      className="mt-4 px-3 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-[9px] tracking-widest font-mono font-bold z-10"
+                      className="mt-4 px-3 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-xs tracking-widest font-mono font-bold z-10"
                     >
                       ✕ Stop Analysis
                     </button>
@@ -660,24 +693,24 @@ export default function App() {
                     <p className="text-xs uppercase tracking-widest font-mono opacity-80 animate-pulse">
                       PROCESSING OPTICAL FRAME...
                     </p>
-                    <p className="text-[9px] uppercase tracking-widest font-mono opacity-50 mt-1">
+                    <p className="text-xs uppercase tracking-widest font-mono opacity-50 mt-1">
                       Extracting spatial geometry & illuminance profiles
                     </p>
                     <button
                       onClick={handleCancelRequest}
-                      className="mt-4 px-3 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-[9px] tracking-widest font-mono font-bold z-10"
+                      className="mt-4 px-3 py-1 bg-red-950/80 border border-red-500/60 hover:bg-red-700 hover:text-white hover:border-red-500 text-red-200 transition-colors uppercase text-xs tracking-widest font-mono font-bold z-10"
                     >
                       ✕ Stop Analysis
                     </button>
                   </div>
                 ) : analysisError ? (
-                  <div className="text-red-400 font-mono text-[11px] p-3 border border-red-500/30 bg-red-950/20 uppercase tracking-wide">
+                  <div className="text-red-400 font-mono text-xs p-3 border border-red-500/30 bg-red-950/20 uppercase tracking-wide">
                     {analysisError}
                   </div>
                 ) : (
                   /* Render corresponding tab data */
                   <div className="text-left font-mono py-1">
-                    <div className="flex justify-between items-center text-[9px] opacity-40 border-b border-white/20 pb-2 mb-4 uppercase tracking-widest">
+                    <div className="flex justify-between items-center text-xs opacity-40 border-b border-white/20 pb-2 mb-4 uppercase tracking-widest">
                       <span>REPORT_STATUS: VERIFIED</span>
                       <span>
                         TAB: {activeTab === 'report' ? 'DIAGNOSTIC' : activeTab === 'catalog' ? 'EQUIPMENT_CATALOG' : 'ROI_METRICS'}
@@ -691,10 +724,10 @@ export default function App() {
                       {activeTab === 'report' && !analysisResult && (
                         <div className="h-full flex flex-col items-center justify-center py-12 text-center opacity-40">
                           <Bot className="w-10 h-10 mb-3 opacity-60" strokeWidth={1} />
-                          <p className="text-[10px] uppercase tracking-widest leading-relaxed max-w-[280px]">
+                          <p className="text-xs uppercase tracking-widest leading-relaxed max-w-[280px]">
                             AWAITING scan upload for spatial lighting diagnostics.
                           </p>
-                          <p className="text-[8px] uppercase tracking-[0.2em] mt-2 opacity-50">
+                          <p className="text-xs uppercase tracking-[0.2em] mt-2 opacity-50">
                             DR. ARIS VISION AGENT OFFLINE
                           </p>
                         </div>
@@ -713,7 +746,7 @@ export default function App() {
                 <motion.div 
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`p-3 text-[10px] font-mono uppercase border ${
+                  className={`p-3 text-xs font-mono uppercase border ${
                     auditSaveStatus.success 
                       ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-300' 
                       : 'border-red-500/50 bg-red-950/20 text-red-300'
@@ -726,7 +759,7 @@ export default function App() {
                 </motion.div>
               )}
               
-              <div className="grid grid-cols-3 gap-2 text-[10px] font-mono tracking-wider">
+              <div className="grid grid-cols-3 gap-2 text-xs font-mono tracking-wider">
                 <button
                   onClick={handleQueryCatalog}
                   disabled={isQueryingCatalog || isAnalyzingImage || isCalculatingRoi || isSavingAudit}
@@ -769,25 +802,35 @@ export default function App() {
             <BlueprintBox title="Luminous Flux Data">
               <div className="py-2">
                 <div className="text-center mb-6">
-                  <div className="text-[10px] uppercase opacity-50 mb-1">Current Lux Deficit</div>
-                  <div className="text-6xl font-light tracking-tighter">-1.24</div>
-                  <div className="text-[10px] uppercase opacity-50">Lumens / M²</div>
+                  <div className="text-xs uppercase opacity-50 mb-1">Current Lux Deficit</div>
+                  <div className="text-6xl font-light tracking-tighter">
+                    {spatialData ? (
+                      spatialData.lux_deficit.toFixed(2)
+                    ) : (
+                      <Skeleton className="w-32 h-14 mx-auto my-1 bg-white/5" />
+                    )}
+                  </div>
+                  <div className="text-xs uppercase opacity-50">Lumens / M²</div>
                 </div>
                 
                 <div className="space-y-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-full bg-white/10 h-6 border border-white/20 relative overflow-hidden">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: '65%' }}
-                        transition={{ duration: 1.5, ease: "easeOut" }}
-                        className="h-full bg-white/40 border-r border-white"
-                      ></motion.div>
-                      <div className="absolute inset-0 flex items-center px-2 text-[10px] uppercase mix-blend-difference">Intake Threshold</div>
-                    </div>
+                    {spatialData ? (
+                      <div className="w-full bg-white/10 h-6 border border-white/20 relative overflow-hidden">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.min(100, Math.max(10, (spatialData.lux_deficit + 2.0) * 50))}%` }}
+                          transition={{ duration: 1.5, ease: "easeOut" }}
+                          className="h-full bg-white/40 border-r border-white"
+                        ></motion.div>
+                        <div className="absolute inset-0 flex items-center px-2 text-xs uppercase mix-blend-difference">Intake Threshold</div>
+                      </div>
+                    ) : (
+                      <Skeleton className="w-full h-6 border border-white/20" />
+                    )}
                   </div>
                   
-                  <div className="bg-white/5 p-3 text-[10px] leading-tight border-l-2 border-white uppercase flex gap-3">
+                  <div className="bg-white/5 p-3 text-xs leading-tight border-l-2 border-white uppercase flex gap-3">
                     <Info size={16} className="shrink-0" />
                     <span>Warning: Threshold suggests high optical variance in Section B-14. Recommend re-alignment.</span>
                   </div>
@@ -802,24 +845,34 @@ export default function App() {
             transition={{ delay: 0.5 }}
           >
             <BlueprintBox title="Return on Investment">
-              <div className="py-2 text-center">
-                <div className="text-5xl tracking-tighter mb-1 mt-2">
-                  <span className="text-2xl mr-1 opacity-50">+</span>
-                  18.4
-                  <span className="text-lg ml-1 opacity-60">%</span>
-                </div>
-                <div className="text-[10px] uppercase opacity-50 mb-6">Projected Spatial Efficiency</div>
+              <div className="py-2 text-center font-mono">
+                {spatialData ? (
+                  <div className="text-5xl tracking-tighter mb-1 mt-2">
+                    <span className="text-2xl mr-1 opacity-50">+</span>
+                    {spatialData.spatial_efficiency.toFixed(1)}
+                    <span className="text-lg ml-1 opacity-60">%</span>
+                  </div>
+                ) : (
+                  <Skeleton className="w-28 h-10 mx-auto my-2 bg-white/5" />
+                )}
+                <div className="text-xs uppercase opacity-50 mb-6">Projected Spatial Efficiency</div>
                 
                 <div className="flex gap-1 justify-center h-12 items-end">
-                  {[40, 65, 45, 80, 55, 90, 70].map((h, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ height: 0 }}
-                      animate={{ height: `${h}%` }}
-                      transition={{ delay: 0.6 + (i * 0.05), duration: 0.5 }}
-                      className="w-full max-w-[8px] bg-white/40 border border-white/20"
-                    />
-                  ))}
+                  {spatialData ? (
+                    [40, 65, 45, 80, 55, 90, 70].map((h, i) => (
+                      <motion.div
+                        key={i}
+                        initial={{ height: 0 }}
+                        animate={{ height: `${h}%` }}
+                        transition={{ delay: 0.6 + (i * 0.05), duration: 0.5 }}
+                        className="w-full max-w-[8px] bg-white/40 border border-white/20"
+                      />
+                    ))
+                  ) : (
+                    [1, 2, 3, 4, 5, 6, 7].map((_, i) => (
+                      <Skeleton key={i} className="w-full max-w-[8px] h-8" />
+                    ))
+                  )}
                 </div>
               </div>
             </BlueprintBox>
@@ -827,11 +880,11 @@ export default function App() {
 
           <div className="hidden lg:block pt-4">
              <div className="border-t-2 border-white/80 pt-4 opacity-40">
-               <div className="flex justify-between items-center text-[10px] uppercase tracking-widest mb-1">
+               <div className="flex justify-between items-center text-xs uppercase tracking-widest mb-1">
                  <span>Sheet No: A-101</span>
                  <span className="flex items-center gap-1"><Layers size={10} /> LAYER: 03_ANALYSIS</span>
                </div>
-               <div className="flex justify-between items-center text-[10px] uppercase tracking-widest">
+               <div className="flex justify-between items-center text-xs uppercase tracking-widest">
                  <span>Scale: AS NOTED</span>
                  <span className="flex items-center gap-1"><Ruler size={10} /> UNITS: METRIC</span>
                </div>
@@ -842,13 +895,13 @@ export default function App() {
       </main>
 
       {/* Footer Branding */}
-      <footer className="mt-16 pt-8 border-t border-white/20 flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] uppercase tracking-[0.4em] opacity-40">
+      <footer className="mt-16 pt-8 border-t border-white/20 flex flex-col md:flex-row justify-between items-center gap-4 text-xs uppercase tracking-[0.4em] opacity-40">
         <div className="flex gap-8">
-           <span>Architectural Systems Group</span>
-           <span>Spatial Dynamics Division</span>
+           {/* <span>Spatial Dynamics Division</span> */}
+           <span>© 2026 Developed by <a className="text-white hover:text-gray-400 transition-colors underline" href="https://github.com/vero-code" target="_blank" rel="noopener noreferrer">Veronika Kashtanova</a></span>
         </div>
         <div className="flex items-center gap-2">
-          <Eye size={12} /> Real-time Simulation Active
+          <Eye size={12} /> AI responses may contain inaccuracies, please double-check the information
         </div>
       </footer>
     </div>

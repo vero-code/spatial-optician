@@ -1,9 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Architects+Daughter&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&family=Architects+Daughter&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-draft: "Architects Daughter", cursive;
+  --font-draft: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-sketch: "Architects Daughter", cursive;
   
   --color-blueprint-blue: #0a2e5c;
   --color-blueprint-white: rgba(240, 249, 255, 0.9);
@@ -12,7 +13,7 @@
 
 @layer base {
   body {
-    @apply bg-blueprint-blue text-blueprint-white font-draft;
+    @apply bg-blueprint-blue text-blueprint-white font-sans;
     background-image: 
       linear-gradient(var(--color-blueprint-line) 1px, transparent 1px),
       linear-gradient(90deg, var(--color-blueprint-line) 1px, transparent 1px),
