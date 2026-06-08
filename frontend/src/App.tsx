@@ -511,7 +511,7 @@ export default function App() {
               {uploadedImage ? (
                 /* Image preview */
                 <div className="relative w-full h-full flex flex-col items-center justify-center gap-2">
-                  <div className="relative border border-white/30 shadow-lg overflow-hidden h-full max-h-[180px] w-full flex items-center justify-center bg-black/10">
+                  <div className="relative border border-white/30 shadow-lg overflow-hidden h-full max-h-[230px] w-full flex items-center justify-center bg-black/10">
                     <img
                       src={uploadedImage}
                       alt="Uploaded scan"
@@ -583,7 +583,7 @@ export default function App() {
               {/* Specs at bottom of upload area */}
               <div className="absolute bottom-2 left-4 right-4 flex justify-between text-xs uppercase tracking-widest opacity-40">
                 <span>BUFFER_STATUS: {isAnalyzingImage ? 'ANALYZING...' : uploadedImage ? 'SCAN_LOADED' : 'READY'}</span>
-                <span>ENC: RSA-4096 / AUTH_SYSTEM_V2</span>
+                {/* <span>ENC: RSA-4096 / AUTH_SYSTEM_V2</span> */}
               </div>
             </div>
           </div>
@@ -830,10 +830,21 @@ export default function App() {
                     )}
                   </div>
                   
-                  <div className="bg-white/5 p-3 text-xs leading-tight border-l-2 border-white uppercase flex gap-3">
-                    <Info size={16} className="shrink-0" />
-                    <span>Warning: Threshold suggests high optical variance in Section B-14. Recommend re-alignment.</span>
-                  </div>
+                  {spatialData ? (
+                    spatialData.lux_deficit < -1.0 ? (
+                      <div className="bg-red-950/20 border-l-2 border-red-500 p-3 text-xs leading-tight uppercase flex gap-3 text-red-300">
+                        <Info size={16} className="shrink-0 text-red-400" />
+                        <span>Warning: High lux deficit detected in {spatialData.site_reference}. Retrofitting recommended.</span>
+                      </div>
+                    ) : (
+                      <div className="bg-emerald-950/20 border-l-2 border-emerald-500 p-3 text-xs leading-tight uppercase flex gap-3 text-emerald-300">
+                        <Info size={16} className="shrink-0 text-emerald-400" />
+                        <span>Status: Light levels within acceptable tolerance for {spatialData.site_reference}.</span>
+                      </div>
+                    )
+                  ) : (
+                    <Skeleton className="w-full h-12" />
+                  )}
                 </div>
               </div>
             </BlueprintBox>
