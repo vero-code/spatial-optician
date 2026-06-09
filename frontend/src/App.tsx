@@ -184,7 +184,8 @@ export default function App() {
   const [isQueryingCatalog, setIsQueryingCatalog] = useState(false);
   const [isCalculatingRoi, setIsCalculatingRoi] = useState(false);
   const [isSavingAudit, setIsSavingAudit] = useState(false);
-  const [auditSaveStatus, setAuditSaveStatus] = useState<{success: boolean, text: string} | null>(null);
+  const [auditSaveStatus, setAuditSaveStatus] = useState<{success: boolean, text: string, fullMessage?: string} | null>(null);
+  const [showAuditDetails, setShowAuditDetails] = useState(false);
 
   const startNewRequest = () => {
     if (abortControllerRef.current) {
@@ -353,6 +354,7 @@ export default function App() {
     if (!analysisResult) return;
     setIsSavingAudit(true);
     setAuditSaveStatus(null);
+    setShowAuditDetails(false);
     setAnalysisError(null);
     const signal = startNewRequest();
     try {
@@ -362,15 +364,21 @@ export default function App() {
         signal,
         body: JSON.stringify({
           session_id: "save-audit",
-          message: `Please record this audit findings into the 'audit_history' collection in MongoDB using the insert_document MCP tool. Based on the audit description: "${analysisResult}" and the spatial data parameters (site reference: "${spatialData?.site_reference || 'NY-HUD-01 (Hudson Logistics Hub)'}", lux deficit: ${spatialData?.lux_deficit || -1.0}, spatial efficiency: ${spatialData?.spatial_efficiency || 15}%), dynamically determine appropriate values for: facility_type (e.g., 'office', 'residential', 'warehouse'), total_area_sqm (estimate a realistic size, e.g. ~50 sqm for a small office, ~30 sqm for a living room, ~2500 sqm for a large warehouse), ceiling_height_meters, measured_average_lux, target_required_lux, lux_deficit, current_lighting_type, current_estimated_power_kw, recommended_fixture_id, recommended_quantity, and status (set to 'Needs Upgrade'). Do not use hardcoded dimensions unless they match the analyzed space type. Output the confirmation with the exact insertedId returned by the database.`
+          message: `Please record this audit findings into the 'audit_history' collection in MongoDB using the insert_document MCP tool. Based on the audit description: "${analysisResult}" and the spatial data parameters (site reference: "${spatialData?.site_reference || 'NY-HUD-01 (Hudson Logistics Hub)'}", lux deficit: ${spatialData?.lux_deficit || -1.0}, spatial efficiency: ${spatialData?.spatial_efficiency || 15}%), dynamically determine appropriate values for: facility_type (e.g., 'office', 'residential', 'warehouse'), total_area_sqm (estimate a realistic size, e.g. ~50 sqm for a small office, ~30 sqm for a living room, ~2500 sqm for a large warehouse), ceiling_height_meters, measured_average_lux, target_required_lux, lux_deficit, current_lighting_type, current_estimated_power_kw, recommended_fixture_id, recommended_quantity, status (set to 'Needs Upgrade'), and created_at (set to the current ISO timestamp: '${new Date().toISOString()}'). Do not use hardcoded dimensions unless they match the analyzed space type. Output the confirmation with the exact insertedId returned by the database.`
         })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to save audit");
       
+      const idMatch = data.message.match(/[a-f\d]{24}/i);
+      const insertedId = idMatch ? idMatch[0] : null;
+
       setAuditSaveStatus({
         success: true,
-        text: `AUDIT SAVED SUCCESSFUL. ${data.message}`
+        text: insertedId 
+          ? `Audit Saved Successfully. Registered ID: ${insertedId}`
+          : 'Audit Saved Successfully to Database.',
+        fullMessage: data.message
       });
     } catch (err: any) {
       if (err.name === 'AbortError') {
@@ -829,16 +837,55 @@ export default function App() {
                 <motion.div 
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`p-3 text-xs font-mono uppercase border ${
+                  className={`p-4 border relative group ${
                     auditSaveStatus.success 
-                      ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-300' 
-                      : 'border-red-500/50 bg-red-950/20 text-red-300'
+                      ? 'border-emerald-500/50 bg-[#0a2e5c]/95 text-emerald-300' 
+                      : 'border-red-500/50 bg-[#0a2e5c]/95 text-red-300'
                   }`}
                 >
-                  <div className="flex justify-between items-center">
-                    <span>{auditSaveStatus.text}</span>
-                    <button onClick={() => setAuditSaveStatus(null)} className="ml-2 font-bold hover:text-white">✕</button>
+                  {/* Corner marks for blueprint style */}
+                  <div className={`absolute -top-1 -left-1 w-2.5 h-2.5 border-t border-l ${auditSaveStatus.success ? 'border-emerald-400/80' : 'border-red-400/80'}`}></div>
+                  <div className={`absolute -top-1 -right-1 w-2.5 h-2.5 border-t border-r ${auditSaveStatus.success ? 'border-emerald-400/80' : 'border-red-400/80'}`}></div>
+                  <div className={`absolute -bottom-1 -left-1 w-2.5 h-2.5 border-b border-l ${auditSaveStatus.success ? 'border-emerald-400/80' : 'border-red-400/80'}`}></div>
+                  <div className={`absolute -bottom-1 -right-1 w-2.5 h-2.5 border-b border-r ${auditSaveStatus.success ? 'border-emerald-400/80' : 'border-red-400/80'}`}></div>
+
+                  <div className="flex justify-between items-start gap-4 text-left">
+                    <div className="flex-1">
+                      <div className="text-[10px] uppercase tracking-[0.2em] font-mono font-bold flex items-center gap-1.5 mb-1.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${auditSaveStatus.success ? 'bg-emerald-400' : 'bg-red-400'} animate-pulse`}></span>
+                        {auditSaveStatus.success ? 'Database Registry Status' : 'Database Error'}
+                      </div>
+                      <p className="text-xs tracking-wide text-white/90 leading-relaxed font-sans">
+                        {auditSaveStatus.text}
+                      </p>
+                      {auditSaveStatus.success && auditSaveStatus.fullMessage && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAuditDetails(prev => !prev)}
+                          className="mt-2 text-[10px] uppercase tracking-wider text-emerald-400 hover:text-emerald-300 hover:underline transition-colors block cursor-pointer font-mono font-bold"
+                        >
+                          {showAuditDetails ? '[-] Hide System Report' : '[+] View System Report'}
+                        </button>
+                      )}
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setAuditSaveStatus(null);
+                        setShowAuditDetails(false);
+                      }} 
+                      className="text-xs opacity-60 hover:opacity-100 hover:text-white transition-opacity font-bold cursor-pointer shrink-0 mt-0.5"
+                    >
+                      ✕
+                    </button>
                   </div>
+
+                  {/* Expandable details report */}
+                  {showAuditDetails && auditSaveStatus.fullMessage && (
+                    <div className="mt-4 pt-3 border-t border-white/20 max-h-[200px] overflow-y-auto custom-scrollbar text-left font-sans">
+                      {formatReportText(auditSaveStatus.fullMessage)}
+                    </div>
+                  )}
                 </motion.div>
               )}
               
