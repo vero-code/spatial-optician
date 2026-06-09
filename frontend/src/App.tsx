@@ -293,7 +293,7 @@ export default function App() {
         signal,
         body: JSON.stringify({
           session_id: "catalog-query",
-          message: `Based on the following audit description: "${analysisResult}", use the MCP tools (such as query_documents or get_schema) to search the 'equipment_catalog' collection in the database. Find fixtures that are suitable for this facility type. Report back the recommended models, listing their brand, power, luminous flux, and unit cost. Format the output with clear headers and bullet points.`
+          message: `Based on the following audit description: "${analysisResult}", use the MCP tools (such as query_documents or get_schema) to search the 'equipment_catalog' collection in the database. Find fixtures that are suitable for this facility type (site reference: "${spatialData?.site_reference || 'NY-HUD-01 (Hudson Logistics Hub)'}"). Report back the recommended models, listing their brand, power, luminous flux, and unit cost. Format the output with clear headers and bullet points.`
         })
       });
       const data = await res.json();
@@ -328,7 +328,7 @@ export default function App() {
         signal,
         body: JSON.stringify({
           session_id: "roi-query",
-          message: `Based on this audit description: "${analysisResult}", calculate the financial ROI and energy savings for upgrading the current lighting to the recommended LED fixtures in our catalog. Query the 'energy_tariffs' collection in the database via MCP to find the electricity rates for NY (since the site is NY-HUD-01). Perform the calculations: current power draw vs proposed, annual cost savings, and payback period. Show your work, including database query results.`
+          message: `Based on this audit description: "${analysisResult}", calculate the financial ROI and energy savings for upgrading the current lighting to the recommended LED fixtures in our catalog. Query the 'energy_tariffs' collection in the database via MCP to find the electricity rates for NY (since the site is "${spatialData?.site_reference || 'NY-HUD-01 (Hudson Logistics Hub)'}"). Perform the calculations: current power draw vs proposed, annual cost savings, and payback period. Show your work, including database query results.`
         })
       });
       const data = await res.json();
@@ -362,7 +362,7 @@ export default function App() {
         signal,
         body: JSON.stringify({
           session_id: "save-audit",
-          message: `Please record this audit findings into the 'audit_history' collection in MongoDB using the insert_document MCP tool. The site reference is 'NY-HUD-01', total area is 2500 sqm, status is 'Needs Upgrade'. Use the analyzed information from this text: "${analysisResult}". Output the confirmation with the exact insertedId returned by the database.`
+          message: `Please record this audit findings into the 'audit_history' collection in MongoDB using the insert_document MCP tool. The site reference is '${spatialData?.site_reference || 'NY-HUD-01 (Hudson Logistics Hub)'}', total area is ${spatialData?.site_reference?.includes('LIV') ? '30' : '2500'} sqm, status is 'Needs Upgrade'. Use the analyzed information from this text: "${analysisResult}". Output the confirmation with the exact insertedId returned by the database.`
         })
       });
       const data = await res.json();

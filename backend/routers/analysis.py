@@ -52,6 +52,7 @@ async def analyze_photo(file: UploadFile = File(...)):
                 lux_deficit: float
                 spatial_efficiency: float
                 optical_scale: str
+                site_reference: str
 
             mime_type = file.content_type or "image/jpeg"
             client = genai.Client(api_key=GEMINI_API_KEY)
@@ -62,7 +63,8 @@ async def analyze_photo(file: UploadFile = File(...)):
                 "- rayleigh_scattering: dispersion formula string, e.g. 'λ-4 η' or 'λ-3.8 η'\n"
                 "- lux_deficit: lux deficit compared to standard requirements, float from -2.00 to -0.10 (lumens/m²)\n"
                 "- spatial_efficiency: overall estimated spatial lighting efficiency, float from 10.0 to 30.0 (%)\n"
-                "- optical_scale: estimate the drawing/photo scale, return standard ratio string (e.g. '1:100', '1:200', '1:500' for floor plans, or '1:10', '1:20' for photos of spaces/rooms)"
+                "- optical_scale: estimate the drawing/photo scale, return standard ratio string (e.g. '1:100', '1:200', '1:500' for floor plans, or '1:10', '1:20' for photos of spaces/rooms)\n"
+                "- site_reference: If the image represents an industrial warehouse, factory, hangar, or commercial logistics space, return exactly 'NY-HUD-01 (Hudson Logistics Hub)'. If it is a residential living room, hallway, or apartment space, return exactly 'NY-LIV-01 (Residential Living Room)'. Otherwise return 'NY-GEN-01'."
             )
 
             response = client.models.generate_content(
@@ -84,7 +86,8 @@ async def analyze_photo(file: UploadFile = File(...)):
             lux_def = round(float(metrics.get("lux_deficit", lux_def)), 2)
             spat_eff = round(float(metrics.get("spatial_efficiency", spat_eff)), 1)
             opt_scale = str(metrics.get("optical_scale", opt_scale))
-            print(f"[Metrics] Extracted from image: diff={diff_coeff}, rayleigh='{rayleigh}', lux={lux_def}, eff={spat_eff}, scale='{opt_scale}'")
+            site_ref = str(metrics.get("site_reference", site_ref))
+            print(f"[Metrics] Extracted from image: diff={diff_coeff}, rayleigh='{rayleigh}', lux={lux_def}, eff={spat_eff}, scale='{opt_scale}', site='{site_ref}'")
         except Exception as exc:
             print(f"[Metrics] Gemini extraction failed: {exc}. Using fallback values.")
 

@@ -73,6 +73,7 @@ def seed_database():
                 "mounting_type": "Surface/Chain",
                 "unit_cost_usd": 125.00,
                 "lifespan_hours": 60000,
+                "suitable_for": ["warehouse", "factory", "workshop"]
             },
             {
                 "model_id": "LED-T8-4FT-15W",
@@ -108,10 +109,37 @@ def seed_database():
                 "luminous_flux_lumens": 800,
                 "power_watts": 9,
                 "efficacy_lm_w": round(800 / 9),
-                "color_temperature_k": 3000,
+                "color_temperature_k": 2700,
                 "unit_cost_usd": 4.50,
                 "lifespan_hours": 25000,
+                "suitable_for": ["residential", "living_room", "hallway"],
                 "compatible_replacements": ["INC-A19-60W", "CFL-A19-14W"]
+            },
+            {
+                "model_id": "LED-STRIP-WARM",
+                "brand": "EcoTape Systems",
+                "type": "Linear LED Tape",
+                "technology": "LED",
+                "luminous_flux_lumens": 1200,
+                "power_watts": 12,
+                "efficacy_lm_w": 100,
+                "color_temperature_k": 2400,
+                "unit_cost_usd": 18.00,
+                "lifespan_hours": 40000,
+                "suitable_for": ["residential", "living_room", "bookshelf", "cove"]
+            },
+            {
+                "model_id": "LED-FLOOR-LAMP",
+                "brand": "AeroLight Design",
+                "type": "Dimmable Floor Lamp",
+                "technology": "LED",
+                "luminous_flux_lumens": 650,
+                "power_watts": 8,
+                "efficacy_lm_w": 81,
+                "color_temperature_k": 2700,
+                "unit_cost_usd": 49.00,
+                "lifespan_hours": 30000,
+                "suitable_for": ["residential", "living_room", "reading"]
             }
         ]
         db["equipment_catalog"].insert_many(fixtures)
@@ -121,7 +149,7 @@ def seed_database():
         audits = [
             {
                 "audit_id": "AUD-2026-NY01",
-                "site_reference": "NY-HUD-01",
+                "site_reference": "NY-HUD-01 (Hudson Logistics Hub)",
                 "facility_type": "warehouse",
                 "total_area_sqm": 2500,
                 "ceiling_height_meters": 12.0,
@@ -135,6 +163,25 @@ def seed_database():
                 "reflectance_floor": 0.15,
                 "recommended_fixture_id": "OPT-IND-LED-200",
                 "recommended_quantity": 48,
+                "status": "Needs Upgrade",
+                "created_at": datetime.now(timezone.utc)
+            },
+            {
+                "audit_id": "AUD-2026-NY02",
+                "site_reference": "NY-LIV-01 (Residential Living Room)",
+                "facility_type": "residential",
+                "total_area_sqm": 30,
+                "ceiling_height_meters": 2.8,
+                "measured_average_lux": 40,
+                "target_required_lux": 150,
+                "lux_deficit": -110,
+                "current_lighting_type": "Legacy Incandescent Bulbs",
+                "current_estimated_power_kw": 0.18,
+                "reflectance_ceiling": 0.80,
+                "reflectance_walls": 0.50,
+                "reflectance_floor": 0.20,
+                "recommended_fixture_id": "LED-A19-9W",
+                "recommended_quantity": 3,
                 "status": "Needs Upgrade",
                 "created_at": datetime.now(timezone.utc)
             },
