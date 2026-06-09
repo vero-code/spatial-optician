@@ -67,7 +67,7 @@ npm start
 
 * **Backend Modularization & Refactoring**: Reorganized the backend code from a monolithic `main.py` into a highly decoupled, modular structure:
   * `config.py` — Centralized environment variables (`GEMINI_MODEL`, `MONGODB_URI`, etc.).
-  * `prompts.py` — Isolated AI agent and Vision prompt constants.
+  * `prompts.py` Isolated AI agent and Vision prompt constants.
   * `schemas.py` — Organized Pydantic request and response data models.
   * `database.py` — Managed MongoDB client setup.
   * `agent.py` — Constructed Google ADK agents and lifecycle hooks.
@@ -75,4 +75,9 @@ npm start
   * **🔍 Find Fixtures** — Directs the Gemini agent to query the `equipment_catalog` collection in the database via MCP and recommend suitable fixture models based on the scan description.
   * **⚡ Calculate ROI** — Triggers the agent to fetch electricity rates from `energy_tariffs` and calculate estimated power draw reduction, financial savings, and the exact payback period (ROI).
   * **💾 Save Audit** — Invokes the `insert_document` MCP tool to save the new spatial audit findings into the `audit_history` collection, returning the resulting MongoDB insertion ID.
+* **Dynamic Auditing & UI Polish (June 9, 2026)**:
+  * **Multi-Facility Profiling**: Added dynamic space classification supporting warehouses (`NY-HUD-01`), residential spaces (`NY-LIV-01`), and commercial offices (`NY-OFF-01`) live via Gemini Vision.
+  * **Dynamic Parameter Estimation**: Replaced hardcoded audit sizes. The AI agent dynamically calculates and saves the appropriate facility dimensions, ceiling heights, lux levels, and timestamps.
+  * **Zero Fallbacks**: Removed silent fallback mocks from the API to guarantee live, authentic Gemini Vision diagnostics and explicit error reporting.
+  * **Polished Save Notification**: Redesigned the MongoDB response panel with a blueprint-style border, real-time `insertedId` display, and an expandable `[+] View System Report` toggle that renders the AI's registration report in rich markdown.
 

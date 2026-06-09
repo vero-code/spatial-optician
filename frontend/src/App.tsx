@@ -294,7 +294,7 @@ export default function App() {
         signal,
         body: JSON.stringify({
           session_id: "catalog-query",
-          message: `Based on the following audit description: "${analysisResult}", use the MCP tools (such as query_documents or get_schema) to search the 'equipment_catalog' collection in the database. Find fixtures that are suitable for this facility type (site reference: "${spatialData?.site_reference || 'NY-HUD-01 (Hudson Logistics Hub)'}"). Report back the recommended models, listing their brand, power, luminous flux, and unit cost. Format the output with clear headers and bullet points.`
+          message: `Based on the following audit description: "${analysisResult}", use the MCP tools (such as query_documents or get_schema) to search the 'equipment_catalog' collection in the database. Find fixtures that are suitable for this facility type (site reference: "${spatialData?.site_reference || 'NY-HUD-01 (Hudson Logistics Hub)'}"). If no suitable fixtures for this facility type exist in the database catalog, use your Google search tool to find a real, commercially available LED fixture model for this use-case on the web, extract its technical details, and use the insert_document MCP tool to write it to the 'equipment_catalog' collection in MongoDB so it is saved for future calculations. Then report back the recommended models, listing their brand, model_id, power, luminous flux, and unit cost. Format the output with clear headers and bullet points.`
         })
       });
       const data = await res.json();
