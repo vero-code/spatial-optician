@@ -328,7 +328,7 @@ export default function App() {
         signal,
         body: JSON.stringify({
           session_id: "roi-query",
-          message: `Based on this audit description: "${analysisResult}", calculate the financial ROI and energy savings for upgrading the current lighting to the recommended LED fixtures in our catalog. Query the 'energy_tariffs' collection in the database via MCP to find the electricity rates for NY (since the site is "${spatialData?.site_reference || 'NY-HUD-01 (Hudson Logistics Hub)'}"). Perform the calculations: current power draw vs proposed, annual cost savings, and payback period. Show your work, including database query results.`
+          message: `Based on this audit description: "${analysisResult}" and the site reference "${spatialData?.site_reference || 'NY-HUD-01'}", calculate the financial ROI and energy savings for upgrading the current lighting to the recommended LED fixtures in our catalog. Determine the geographic region (e.g. 'US-NY' for site references starting with 'NY') and query the 'energy_tariffs' collection in the database via MCP to find the electricity rates. Perform the calculations: current power draw vs proposed, annual cost savings, and payback period. Show your work, including database query results.`
         })
       });
       const data = await res.json();
@@ -362,7 +362,7 @@ export default function App() {
         signal,
         body: JSON.stringify({
           session_id: "save-audit",
-          message: `Please record this audit findings into the 'audit_history' collection in MongoDB using the insert_document MCP tool. The site reference is '${spatialData?.site_reference || 'NY-HUD-01 (Hudson Logistics Hub)'}', total area is ${spatialData?.site_reference?.includes('LIV') ? '30' : '2500'} sqm, status is 'Needs Upgrade'. Use the analyzed information from this text: "${analysisResult}". Output the confirmation with the exact insertedId returned by the database.`
+          message: `Please record this audit findings into the 'audit_history' collection in MongoDB using the insert_document MCP tool. Based on the audit description: "${analysisResult}" and the spatial data parameters (site reference: "${spatialData?.site_reference || 'NY-HUD-01 (Hudson Logistics Hub)'}", lux deficit: ${spatialData?.lux_deficit || -1.0}, spatial efficiency: ${spatialData?.spatial_efficiency || 15}%), dynamically determine appropriate values for: facility_type (e.g., 'office', 'residential', 'warehouse'), total_area_sqm (estimate a realistic size, e.g. ~50 sqm for a small office, ~30 sqm for a living room, ~2500 sqm for a large warehouse), ceiling_height_meters, measured_average_lux, target_required_lux, lux_deficit, current_lighting_type, current_estimated_power_kw, recommended_fixture_id, recommended_quantity, and status (set to 'Needs Upgrade'). Do not use hardcoded dimensions unless they match the analyzed space type. Output the confirmation with the exact insertedId returned by the database.`
         })
       });
       const data = await res.json();

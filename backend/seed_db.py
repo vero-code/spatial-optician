@@ -186,6 +186,25 @@ def seed_database():
                 "created_at": datetime.now(timezone.utc)
             },
             {
+                "audit_id": "AUD-2026-NY03",
+                "site_reference": "NY-OFF-01 (Commercial Small Office)",
+                "facility_type": "office",
+                "total_area_sqm": 50,
+                "ceiling_height_meters": 3.0,
+                "measured_average_lux": 350,
+                "target_required_lux": 500,
+                "lux_deficit": -150,
+                "current_lighting_type": "Legacy Fluorescent Tubes",
+                "current_estimated_power_kw": 0.432,
+                "reflectance_ceiling": 0.80,
+                "reflectance_walls": 0.60,
+                "reflectance_floor": 0.20,
+                "recommended_fixture_id": "OPT-COM-PANEL-040",
+                "recommended_quantity": 6,
+                "status": "Needs Upgrade",
+                "created_at": datetime.now(timezone.utc)
+            },
+            {
                 "audit_id": "AUD-2026-CH02",
                 "site_reference": "CH-DIST-04",
                 "facility_type": "retail",

@@ -30,66 +30,69 @@ _FALLBACK_HISTORY = [
 @router.post("/analyze", response_model=SpatialAnalysisResult)
 async def analyze_photo(file: UploadFile = File(...)):
     """Analyze the photo using Gemini Vision to extract spatial parameters, persist, and return."""
+    if not GEMINI_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="GEMINI_API_KEY is not configured on the server.",
+        )
+
     image_bytes = await file.read()
     await file.seek(0)
     
-    # Default fallback values
-    site_ref = f"NY-HUD-{random.randint(10, 99)}"
-    cal_date = time.strftime("%d.%m.%Y")
-    opt_scale = "1:500"
-    diff_coeff = round(random.uniform(0.75, 0.95), 3)
-    rayleigh = "λ-4 η"
-    lux_def = round(random.uniform(-1.50, -0.50), 2)
-    spat_eff = round(random.uniform(15.0, 22.0), 1)
+    try:
+        from pydantic import BaseModel
+        
+        class SpatialMetricsEstimation(BaseModel):
+            diffusion_coefficient: float
+            rayleigh_scattering: str
+            lux_deficit: float
+            spatial_efficiency: float
+            optical_scale: str
+            site_reference: str
 
-    if GEMINI_API_KEY:
-        try:
-            from pydantic import BaseModel
-            
-            class SpatialMetricsEstimation(BaseModel):
-                diffusion_coefficient: float
-                rayleigh_scattering: str
-                lux_deficit: float
-                spatial_efficiency: float
-                optical_scale: str
-                site_reference: str
+        mime_type = file.content_type or "image/jpeg"
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        
+        prompt = (
+            "You are an expert lighting and optical engineer. Analyze this image and estimate the following metrics:\n"
+            "- diffusion_coefficient: how diffuse/soft the lighting is, float from 0.1 to 1.0 (e.g. 0.8+ for soft panels/windows, 0.2-0.5 for direct spotlights/bulbs)\n"
+            "- rayleigh_scattering: dispersion formula string, e.g. 'λ-4 η' or 'λ-3.8 η'\n"
+            "- lux_deficit: lux deficit compared to standard requirements, float from -2.00 to -0.10 (lumens/m²)\n"
+            "- spatial_efficiency: overall estimated spatial lighting efficiency, float from 10.0 to 30.0 (%)\n"
+            "- optical_scale: estimate the drawing/photo scale, return standard ratio string (e.g. '1:100', '1:200', '1:500' for floor plans, or '1:10', '1:20' for photos of spaces/rooms)\n"
+            "- site_reference: Classify the space in the image. If it is an industrial warehouse, factory, or logistics space, return exactly 'NY-HUD-01 (Hudson Logistics Hub)'. If it is a residential living room, hallway, or home space, return exactly 'NY-LIV-01 (Residential Living Room)'. If it is a commercial office, conference room, or workspace, return exactly 'NY-OFF-01 (Commercial Small Office)'. Otherwise, generate a creative site reference code in the format 'NY-[TYPE]-01 (Descriptive Name)'."
+        )
 
-            mime_type = file.content_type or "image/jpeg"
-            client = genai.Client(api_key=GEMINI_API_KEY)
-            
-            prompt = (
-                "You are an expert lighting and optical engineer. Analyze this image and estimate the following metrics:\n"
-                "- diffusion_coefficient: how diffuse/soft the lighting is, float from 0.1 to 1.0 (e.g. 0.8+ for soft panels/windows, 0.2-0.5 for direct spotlights/bulbs)\n"
-                "- rayleigh_scattering: dispersion formula string, e.g. 'λ-4 η' or 'λ-3.8 η'\n"
-                "- lux_deficit: lux deficit compared to standard requirements, float from -2.00 to -0.10 (lumens/m²)\n"
-                "- spatial_efficiency: overall estimated spatial lighting efficiency, float from 10.0 to 30.0 (%)\n"
-                "- optical_scale: estimate the drawing/photo scale, return standard ratio string (e.g. '1:100', '1:200', '1:500' for floor plans, or '1:10', '1:20' for photos of spaces/rooms)\n"
-                "- site_reference: If the image represents an industrial warehouse, factory, hangar, or commercial logistics space, return exactly 'NY-HUD-01 (Hudson Logistics Hub)'. If it is a residential living room, hallway, or apartment space, return exactly 'NY-LIV-01 (Residential Living Room)'. Otherwise return 'NY-GEN-01'."
-            )
-
-            response = client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=[
-                    genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                    prompt,
-                ],
-                config=genai_types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=SpatialMetricsEstimation,
-                ),
-            )
-            
-            import json
-            metrics = json.loads(response.text)
-            diff_coeff = round(float(metrics.get("diffusion_coefficient", diff_coeff)), 3)
-            rayleigh = str(metrics.get("rayleigh_scattering", rayleigh))
-            lux_def = round(float(metrics.get("lux_deficit", lux_def)), 2)
-            spat_eff = round(float(metrics.get("spatial_efficiency", spat_eff)), 1)
-            opt_scale = str(metrics.get("optical_scale", opt_scale))
-            site_ref = str(metrics.get("site_reference", site_ref))
-            print(f"[Metrics] Extracted from image: diff={diff_coeff}, rayleigh='{rayleigh}', lux={lux_def}, eff={spat_eff}, scale='{opt_scale}', site='{site_ref}'")
-        except Exception as exc:
-            print(f"[Metrics] Gemini extraction failed: {exc}. Using fallback values.")
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[
+                genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                prompt,
+            ],
+            config=genai_types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=SpatialMetricsEstimation,
+            ),
+        )
+        
+        import json
+        metrics = json.loads(response.text)
+        diff_coeff = round(float(metrics["diffusion_coefficient"]), 3)
+        rayleigh = str(metrics["rayleigh_scattering"])
+        lux_def = round(float(metrics["lux_deficit"]), 2)
+        spat_eff = round(float(metrics["spatial_efficiency"]), 1)
+        opt_scale = str(metrics["optical_scale"])
+        site_ref = str(metrics["site_reference"])
+        cal_date = time.strftime("%d.%m.%Y")
+        
+        print(f"[Metrics] Extracted from image: diff={diff_coeff}, rayleigh='{rayleigh}', lux={lux_def}, eff={spat_eff}, scale='{opt_scale}', site='{site_ref}'")
+        
+    except Exception as exc:
+        print(f"[Metrics] Gemini extraction failed: {exc}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Gemini spatial extraction failed: {exc}"
+        )
 
     result = SpatialAnalysisResult(
         site_reference=site_ref,
