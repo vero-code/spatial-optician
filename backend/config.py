@@ -9,5 +9,5 @@ GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
 MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017/spatial_optician")
 MCP_SERVER_URL: str = os.getenv(
     "MCP_SERVER_URL",
-    "https://spatial-optician-mcp-601334765015.europe-west1.run.app/sse"
+    "http://localhost:3001/sse"
 )

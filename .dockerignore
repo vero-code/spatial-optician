@@ -1,0 +1,13 @@
+node_modules
+dist
+backend/.venv
+backend/__pycache__
+backend/*.pyc
+mcp-mongo/node_modules
+mcp-mongo/dist
+frontend/node_modules
+frontend/dist
+.git
+.gitignore
+*.env
+*.env.*
