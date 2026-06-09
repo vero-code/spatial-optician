@@ -13,7 +13,7 @@ def _build_root_agent():
     from google.adk.agents import LlmAgent
     from google.adk.tools import agent_tool, url_context
     from google.adk.tools.google_search_tool import GoogleSearchTool
-    from google.adk.tools.mcp_tool.mcp_session_manager import SseConnectionParams
+    from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams
     from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 
     search_agent = LlmAgent(
@@ -44,7 +44,7 @@ def _build_root_agent():
             agent_tool.AgentTool(agent=search_agent),
             agent_tool.AgentTool(agent=url_agent),
             McpToolset(
-                connection_params=SseConnectionParams(
+                connection_params=StreamableHTTPConnectionParams(
                     url=MCP_SERVER_URL,
                     timeout=30.0,         # Cloud Run cold start can take up to 30s
                     sse_read_timeout=300.0,  # Keep connection alive during long tool calls
